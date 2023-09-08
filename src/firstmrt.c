@@ -315,197 +315,6 @@ int print_nlri_list (
   return error;
 }
 
-void decode_nlri_list (
-  char *saybefore
-, uint8_t *p
-, uint8_t *after
-, uint16_t address_family
-, char *error
-, size_t errbuflen
-) {
-  struct ipv4_address ipv4;
-  struct ipv6_address ipv6;
-  uint8_t prefix_len;
-  uint8_t prefix_bytes;
-
-  if (error) *error = 0;
-  while (p < after) {
-    prefix_len = *((uint8_t*) p);
-    prefix_bytes = (prefix_len >> 3) + ((prefix_len & 0x7)?1:0);
-    if ((p+prefix_bytes+1) > after) {
-      if (error) {
-        snprintf (error, errbuflen-1, "ERROR: NLRI prefix length "
-          "%u(%u bytes) pushes past list end at %lu", 
-          (unsigned int) prefix_len, (unsigned int) prefix_bytes,
-          after - p);
-        error[errbuflen-1]=0;
-      }
-      return;
-    }
-    switch (address_family) {
-      case BGP4MP_AFI_IPV4:
-        memset(&ipv4, 0, sizeof(ipv4));
-        memcpy(&ipv4, p+1, prefix_bytes);
-        printf ("%s" PRI_IPV4 "/%u\n", saybefore,
-          PRI_IPV4_V(ipv4), (uint32_t)  prefix_len);
-        break;
-      case BGP4MP_AFI_IPV6:
-        memset(&ipv6, 0, sizeof(ipv6));
-        memcpy(&ipv6, p+1, prefix_bytes);
-        printf ("%s" PRI_IPV6 "/%u\n", saybefore,
-          PRI_IPV6_V(ipv6), (uint32_t)  prefix_len);
-        break;
-      default: /* not reachable */
-    }
-    p += prefix_bytes+1;
-  }
-  return;
-}
-
-void decode_attribute_nlri (
-  struct BGP_ATTRIBUTE_HEADER *attribute
-, uint16_t length
-, char *error
-, size_t errbuflen
-) {
-  void *p, *after;
-  struct BGP_ATTRIBUTE_REACH_NLRI_START *nlri;
-  struct ipv4_address *ip4;
-  struct ipv6_address *ip6;
-  int i;
-
-  if (error) *error = 0;
-  p = (void*) attribute;
-  after = p + length;
-  p += sizeof(struct BGP_ATTRIBUTE_HEADER);
-  if (! attribute->extended_length) p--;
-  nlri = (struct BGP_ATTRIBUTE_REACH_NLRI_START*) p;
-printf("      family %x, safi %x, nexthoplen %x\n",
-  (uint32_t) nlri->address_family, (uint32_t) nlri->subsequent_address_family,
-  (uint32_t) nlri->next_hop_len);
-  p = ((void*) nlri->next_hop) + nlri->next_hop_len;
-  if (p > after) {
-    if (error) {
-      snprintf (error, errbuflen-1,
-        "ERROR: NLRI next hop size %u pushes past attribute end at %lu", 
-        (unsigned int) nlri->next_hop_len,
-        after - ((void*) attribute));
-      error[errbuflen-1]=0;
-    }
-    return;
-  }
-  switch (nlri->address_family) {
-    case BGP4MP_AFI_IPV4:
-      if ((nlri->next_hop_len & 0x3) != 0) {
-        if (error) {
-          snprintf (error, errbuflen-1,
-            "ERROR: NLRI mismatched IPv4 address family but next hop size %u", 
-            (unsigned int) nlri->next_hop_len);
-          error[errbuflen-1]=0;
-        }
-        return;
-      }
-      ip4 = (struct ipv4_address*) nlri->next_hop;
-      for (i= (int) (nlri->next_hop_len >> 2); i>0; i--) {
-        printf ("         Next Hop: " PRI_IPV4 "\n",
-          PRI_IPV4_V((*ip4)));
-      }
-      break;
-    case BGP4MP_AFI_IPV6:
-      if ((nlri->next_hop_len & 0xf) != 0) {
-        if (error) {
-          snprintf (error, errbuflen-1,
-            "ERROR: NLRI mismatched IPv4 address family but next hop size %u", 
-            (unsigned int) nlri->next_hop_len);
-          error[errbuflen-1]=0;
-        }
-        return;
-      }
-      ip6 = (struct ipv6_address*) nlri->next_hop;
-      for (i= (int) (nlri->next_hop_len >> 4); i>0; i--) {
-        printf ("         Next Hop: " PRI_IPV6 "\n",
-          PRI_IPV6_V((*ip6)));
-        ip6 ++;
-      }
-      break;
-    default:
-      if (error) {
-        snprintf (error, errbuflen-1,
-          "ERROR: NLRI unhandled address family %u", 
-          (unsigned int) nlri->address_family);
-        error[errbuflen-1]=0;
-      }
-      return;
-  }
-  p++; /* https://www.rfc-editor.org/rfc/rfc4760.html#section-3
-        * reserved octet which is set to 0 */
-  decode_nlri_list("         Prefix: ", p, after, nlri->address_family,
-    error, errbuflen);
-  return;
-}
-
-void extract_attributes2 (
-  uint8_t *attributes
-, uint16_t attribute_length
-, char *error
-, int errbuflen
-) {
-  void *endp;
-  struct BGP_ATTRIBUTE_HEADER *attribute;
-  uint16_t length;
-  uint8_t *p;
-
-  if (error) *error = 0;
-  /* put a pointer at the byte after the end of the rib entry.
-   * Any attribute that purports to extend to or past this pointer
-   * is malformed. */
-  endp = attributes + attribute_length;
-  attribute = (struct BGP_ATTRIBUTE_HEADER*) attributes;
-  while ((void*) attribute < endp) {
-    if ( /* fail if we don't have enough data to read the attribute header */
-        ((((void*) attribute) + 3) > endp) ||
-        (attribute->extended_length && (((void*) attribute) + 4) >= endp) 
-       ) {
-      if (error) {
-        snprintf (error, errbuflen-1, "ERROR: attribute short read %u", 
-          (unsigned int) (endp - (void*) attribute));
-        error[errbuflen-1]=0;
-      }
-      return;
-    }
-    if (attribute->extended_length) {
-      p = ((uint8_t*) attribute) + 4;
-      length = ntohs(attribute->length16);
-    } else {
-      p = ((uint8_t*) attribute) + 3;
-      length = (uint16_t) attribute->length8;
-    }
-    if (((void*)p) + length > endp) {
-      if (error) {
-        snprintf (error, errbuflen-1, "ERROR: attribute short read(b) %u < %u", 
-          (unsigned int) (endp - (void*) attribute), (unsigned int) length);
-        error[errbuflen-1]=0;
-      }
-      return;
-    }
-    printf ("    found attribute %u flags 0x%x length %u\n",
-      (unsigned int) attribute->type, (unsigned int) attribute->flags,
-      (unsigned int) length); 
-    switch (attribute->type) {
-      case 14: /* MP_REACH_NLRI */
-        decode_attribute_nlri(attribute,
-          length + (p - ((uint8_t*) attribute)), error, errbuflen);
-        if (*error) return;
-        break;
-      default: /* do nothing */
-        break;
-    }
-    attributes_seen[(int) attribute->type] ++;
-    attribute = (struct BGP_ATTRIBUTE_HEADER*) (p + length);
-  }
-  return;
-}
-
 void extract_attributes (struct RIB_ENTRY *rib) {
   void *endp;
   struct BGP_ATTRIBUTE_HEADER *attribute;
@@ -859,11 +668,11 @@ void print_bgp4mp (
     free_bgp4mp(bgp4mp);
     return;
   }
-printf ("%u.%06u: withdrawn bytes %u, attribute bytes %u, nlri bytes %lu, %s\n",
+printf ("%u.%06u(byte %lu): withdrawn bytes %u, attribute bytes %u, nlri bytes %lu, %s\n",
   (unsigned int) record->seconds, (unsigned int) record->microseconds,
+  bytes_read + 1, 
   (unsigned int) ntohs(bgp4mp->bgp_message->withdrawn_routes_length),
   (unsigned int) bgp4mp->path_attribute_length,
-  /* (unsigned int) length - (((void*)(bgp4mp->nlri)) - (void*) mrtrecord), */
   (record->aftermrt - bgp4mp->nlri_bytes),
   (bgp4mp->header->address_family==BGP4MP_AFI_IPV4)?"IPv4":"IPv6" );
 
@@ -937,14 +746,6 @@ printf ("%u.%06u: withdrawn bytes %u, attribute bytes %u, nlri bytes %lu, %s\n",
       if (bgp4mp->attributes->trace->tip) 
         fprintf (stderr, "Information: %s\n\n", bgp4mp->attributes->trace->tip);
     }
-  }
-  extract_attributes2 (bgp4mp->path_attrbutes,
-    (uint16_t) (bgp4mp->nlri_bytes - bgp4mp->path_attrbutes), error, 999);
-  if (*error) {
-    printf ("%u.%06u: %s\n", (unsigned int) record->seconds,
-              (unsigned int) record->microseconds, error);
-    free_bgp4mp(bgp4mp);
-    return;
   }
   free_bgp4mp(bgp4mp);
   return;
@@ -1061,7 +862,6 @@ void readandprintmrtfile (const char *name) {
 
 void sanitycheck(void) {
   /* make sure the compiler didn't compose the structs in an unexpected way */
-  mrt_sanity_check();
   assert(sizeof(struct TABLEDUMP_V2_PEER_ENTRY) 
     == tabledump_v2_peer_entry_size[3]);
   assert(sizeof(struct RIB_AFI) == 5);

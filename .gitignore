@@ -1,3 +1,5 @@
 *.o
 src/firstmrt
+test/misalignment
+test/mrt-header
 *.swp

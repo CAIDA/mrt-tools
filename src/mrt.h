@@ -126,7 +126,7 @@ enum bgp4mp_afis { /* address family indicators, uint16_t */
 # endif // __BIG_ENDIAN
 };
 
-enum bgp4mp_safis { /* sub-AFIs, uint8_t */
+enum bgp4mp_safis { /* Subsequent address family indicators, uint8_t */
   BGP_SAFI_UNICAST = 0x01,
   BGP_SAFI_MULTICAST = 0x02
 };
@@ -139,6 +139,10 @@ enum bgp4mp_safis { /* sub-AFIs, uint8_t */
 #define ntohll(x) (x)
 #endif // __BIG_ENDIAN
 
+#define PRI_U8FLAGS "%c%c%c%c%c%c%c%c"
+#define PRI_U8FLAGS_V(v) (v&0x80)?'1':'0', (v&0x40)?'1':'0', \
+       (v&0x20)?'1':'0', (v&0x10)?'1':'0', (v&0x08)?'1':'0', \
+       (v&0x04)?'1':'0', (v&0x02)?'1':'0', (v&0x01)?'1':'0'
 
 /* Note for C newbs: a structure which ends in array[] is called a 
  * flexible array struct. You
@@ -285,7 +289,8 @@ struct MRT_TRACEBACK {
      * if either overflow_firstbyte or error_firstbyte is not null. */
 };
 
-struct NLRI {
+struct NLRI { /* "Network Layer Reachability Information" */
+  /* a.k.a. a single decoded network prefix/route */
   struct MRT_TRACEBACK *trace;
   uint16_t address_family;
   uint8_t prefix_len; /* netmask */
@@ -296,14 +301,14 @@ struct NLRI {
   };
 };
 
-struct NLRI_LIST {
+struct NLRI_LIST { /* set of decoded prefixes in this record */
   int num_nlri;
   int faults;
   struct MRT_TRACEBACK *error;
   struct NLRI prefixes[];
 };
 
-struct BGP_MP_REACH {
+struct BGP_MP_REACH { /* decoded MP_REACH_NLRI attribute */
   struct BGP_MP_REACH_HEADER *header;
   struct BGP_ATTRIBUTE *attribute;
   uint16_t address_family;
@@ -326,6 +331,7 @@ struct BGP_ATTRIBUTE {
   uint8_t fault;
   struct MRT_TRACEBACK *trace;
   union {
+    struct BGP_MP_REACH *mp_reach_nlri;
     void *unknown;
   };
 };
