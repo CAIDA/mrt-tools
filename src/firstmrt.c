@@ -663,8 +663,8 @@ extract_attributes(rib->rib_entries[i]);
 
 void *free_bgp4mp (struct DECODED_BGP4MP_MESSAGE *bgp4mp) {
   if (!bgp4mp) return NULL;
-  if (bgp4mp->nlri) mrt_nlri_free(bgp4mp->nlri);
-  if (bgp4mp->withdrawals) mrt_nlri_free(bgp4mp->withdrawals);
+  if (bgp4mp->nlri) mrt_free_nlri(bgp4mp->nlri, FALSE);
+  if (bgp4mp->withdrawals) mrt_free_nlri(bgp4mp->withdrawals, FALSE);
   if (bgp4mp->attributes) mrt_free_attributes(bgp4mp->attributes);
   free(bgp4mp);
   return NULL;
@@ -792,7 +792,7 @@ struct DECODED_BGP4MP_MESSAGE *decode_bgp4mp (
   bgp4mp->withdrawals = mrt_nlri_deserialize(record, 
     bgp4mp->bgp_message->routes_and_attributes, (uint8_t*) p, 
     &(bgp4mp->bgp_message->withdrawn_routes_length), 
-    bgp4mp->header->address_family, FALSE);
+    bgp4mp->header->address_family, FALSE, 0);
 
   bgp4mp->path_attribute_length = ntohs(*p);
   bgp4mp->path_attrbutes = (uint8_t*) (p+1);
@@ -808,11 +808,36 @@ struct DECODED_BGP4MP_MESSAGE *decode_bgp4mp (
   }
   bgp4mp->nlri = mrt_nlri_deserialize(record, bgp4mp->nlri_bytes, aftermrt,
     (uint16_t*) (bgp4mp->path_attrbutes-2), bgp4mp->header->address_family,
-    FALSE);
+    FALSE, 0);
   bgp4mp->attributes = mrt_extract_attributes(record, bgp4mp->path_attrbutes,
     bgp4mp->nlri_bytes, bgp4mp->header->address_family);
   
   return bgp4mp;
+}
+
+void print_mp_reach_nlri (struct BGP_MP_REACH *reach, uint64_t bytes_read) {
+  printf ("    MP_REACH_NLRI: IPv%s %scast(%u)\n", 
+    (reach->address_family == BGP4MP_AFI_IPV4)?"4":"6",
+    (reach->safi == BGP_SAFI_MULTICAST)?"Multi":
+     ((reach->safi == BGP_SAFI_UNICAST)?"Uni":"ERROR"),
+    (unsigned int) reach->safi );
+  if (reach->address_family == BGP4MP_AFI_IPV6) {
+    printf("      Next Hop: " PRI_IPV6 "\n", 
+      PRI_IPV6_V(reach->global_next_hop));
+    if (reach->local_next_hop.ad[0] != 0) 
+      printf("      Next Hop: " PRI_IPV6 " (Local Scope)\n", 
+        PRI_IPV6_V(reach->local_next_hop));
+  } else { /* BGP4MP_AFI_IPV4 */
+    printf("      Next Hop: " PRI_IPV4 "\n", PRI_IPV4_V(reach->next_hop));
+  }
+  (void) print_nlri_list("      Prefix: ", &(reach->l), bytes_read);
+  if (reach->attribute->fault && (reach->attribute->trace)) {
+    fprintf (stderr, "ERROR: %s\n  in MRT record at file position %lu\n",
+      reach->attribute->trace->error, (long unsigned int) bytes_read + 1);
+    mrt_print_trace (stderr, reach->attribute->trace, FALSE);
+    if (reach->attribute->trace->tip) 
+      fprintf (stderr, "Information: %s\n\n", reach->attribute->trace->tip);
+  }
 }
 
 void print_bgp4mp (
@@ -825,6 +850,7 @@ void print_bgp4mp (
   struct DECODED_BGP4MP_MESSAGE *bgp4mp;
   struct BGP_ATTRIBUTE *a;
   int i;
+  uint8_t print = TRUE;
 
   bgp4mp = decode_bgp4mp(record, length, message, error, 999);
   if (*error) {
@@ -862,18 +888,37 @@ printf ("%u.%06u: withdrawn bytes %u, attribute bytes %u, nlri bytes %lu, %s\n",
       printf ("    Aggregator: " PRI_IPV4 " AS%u\n",
         PRI_IPV4_V(bgp4mp->attributes->aggregator), 
         (unsigned int) bgp4mp->attributes->aggregator_as4);
+    if (bgp4mp->attributes->mp_reach_nlri)
+      print_mp_reach_nlri(bgp4mp->attributes->mp_reach_nlri, bytes_read);
     for (i=0; i < bgp4mp->attributes->numattributes; i++) {
       a = &(bgp4mp->attributes->attr[i]);
+      print = TRUE;
       switch (a->type) {
         case BGP_ORIGIN:
+          if (bgp4mp->attributes->origin != BGP_ORIGIN_UNSET) print = FALSE;
+          break;
         case BGP_LOCAL_PREF:
+          if (bgp4mp->attributes->local_pref_set) print = FALSE;
+          break;
         case BGP_ATOMIC_AGGREGATE:
+          if (bgp4mp->attributes->atomic_aggregate) print = FALSE;
+          break;
         case BGP_NEXT_HOP:
+          if (bgp4mp->attributes->next_hop_set) print = FALSE;
+          break;
         case BGP_AGGREGATOR:
+          if (bgp4mp->attributes->aggregator2_set) print = FALSE;
+          break;
         case BGP_AS4_AGGREGATOR:
+          if (bgp4mp->attributes->aggregator4_set) print = FALSE;
+          break;
+        case BGP_MP_REACH_NLRI:
+          if (bgp4mp->attributes->mp_reach_nlri) print = FALSE;
           break;
         default:
-          printf ("    undecoded attribute %u flags 0x%x length %u\n",
+      };
+      if (print) {
+        printf ("    undecoded attribute %u flags 0x%x length %u\n",
             (unsigned int) a->type, (unsigned int) a->header->flags,
             (unsigned int) (a->after - ((uint8_t*) a->header))); 
       }

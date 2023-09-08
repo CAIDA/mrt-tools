@@ -290,6 +290,10 @@ void mrt_free_attributes(struct BGP_ATTRIBUTES *attributes)
           free(attributes->attr[i].unknown);
     };
   }
+  if (attributes->mp_reach_nlri) {
+    mrt_free_nlri(&(attributes->mp_reach_nlri->l), TRUE);
+    free(attributes->mp_reach_nlri);
+  }
   if (attributes->trace) free(attributes->trace);
   free(attributes);
   return;
@@ -363,10 +367,9 @@ void mrt_attribute_mp_reach_nlri (
   struct BGP_MP_REACH_HEADER *h;
   size_t minsize;
   uint8_t badflag = FALSE;
-  struct BGP_MP_REACH_NLRI *reach;
-  struct NLRI_LIST *nlri;
+  struct BGP_MP_REACH *reach;
 
-  if (attributes->mp_reach_nlri_set) {
+  if (attributes->mp_reach_nlri) {
     snprintf(error, 99, "duplicate MP_REACH_NLRI attribute");
     error[99]=0;
     attribute->trace = 
@@ -378,7 +381,7 @@ void mrt_attribute_mp_reach_nlri (
     attribute->fault = TRUE;
     return;
   }
-  minsize = sizeof(struct BGP_MP_REACH_HEADER)+5);
+  minsize = sizeof(struct BGP_MP_REACH_HEADER) + 5;
   h = (struct BGP_MP_REACH_HEADER*) attribute->content;
   if ((attribute->after - attribute->content) < minsize) badflag=TRUE;
   else {
@@ -417,7 +420,7 @@ void mrt_attribute_mp_reach_nlri (
         newtraceback(record, error, mrt_attribute_information);
       attribute->trace->firstbyte = (uint8_t*) attribute->header;
       attribute->trace->afterbyte = attribute->after;
-      attribute->trace->error_firstbyte = &(h->address_family);
+      attribute->trace->error_firstbyte = (uint8_t*) &(h->address_family);
       attribute->trace->error_afterbyte = attribute->trace->error_firstbyte+2;
       attribute->fault = TRUE;
       return;
@@ -437,41 +440,40 @@ void mrt_attribute_mp_reach_nlri (
     attribute->fault = TRUE;
     return ;
   }
-  nlri = mrt_nlri_deserialize (record, attribute->content + minsize,
-    attribute->after, &(attribute->header->length16), h->address_family, TRUE);
-// figuring out how to malloc the structure after collecting the nlris
-  reach = (struct BGP_MP_REACH_NLRI*) malloc();
-  switch (h->address_family) {
-    case BGP4MP_AFI_IPV4:
-      
-      break;
-    case BGP4MP_AFI_IPV6:
-      if ((h->next_hop_len != 16) && (h->next_hop_len != 32)) badflag = TRUE;
-      break;
-    default:
-
-
-  ip = *((struct ipv4_address*) (attribute->content + 4));
-  if ( (attributes->aggregator.whole != 0) &&
-       (attributes->aggregator.whole != ip.whole)) {
-    snprintf(error, 99, 
-        "AS4_AGGREGATOR and AGGREGATOR IP address mismatch: " PRI_IPV4
-        " != " PRI_IPV4,
-        PRI_IPV4_V(ip), PRI_IPV4_V((attributes->aggregator)));
+  /* malloc a buffer for BGP_MP_REACH and populate the reach->l structure
+   * with the decoded and traced NRLI information */
+  reach = (struct BGP_MP_REACH*) mrt_nlri_deserialize (record,
+    attribute->content + minsize, attribute->after,
+    &(attribute->header->length16), h->address_family, TRUE, 
+    ((uint8_t*) &(reach->l)) - ((uint8_t*) reach));
+  if (reach->l.faults) {
+    snprintf(error, 99, "MP_REACH_NRLI decode fault: %s",
+        (reach->l.error)?reach->l.error->error:"");
     error[99]=0;
     attribute->trace = 
-      newtraceback(record, error, mrt_aggregator4_information);
+      newtraceback(record, error, mrt_mp_reach_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
-    attribute->trace->error_firstbyte = attribute->content + 2;
+    attribute->trace->error_firstbyte = attribute->content + minsize;
     attribute->trace->error_afterbyte = attribute->after;
     attribute->fault = TRUE;
-    return ;
   }
-
-  attributes->aggregator4_set = TRUE;
-  attributes->aggregator_as4 = ntohl(*((uint32_t*) attribute->content));
-  attributes->aggregator = ip;
+  reach->header = h;
+  reach->attribute = attribute;
+  reach->address_family = h->address_family;
+  reach->safi = h->subsequent_address_family;
+  switch (h->address_family) {
+    case BGP4MP_AFI_IPV4:
+      reach->next_hop = *((struct ipv4_address*) (h->next_hop));
+      break;
+    case BGP4MP_AFI_IPV6:
+      reach->global_next_hop = *((struct ipv6_address*) (h->next_hop));
+      if (h->next_hop_len == 32)
+        reach->local_next_hop = *((struct ipv6_address*) (h->next_hop + 16));
+      break;
+    default: /* unreachable */
+  }
+  attributes->mp_reach_nlri = reach;
   return ;
 }
 
@@ -884,6 +886,9 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
       case BGP_AS4_AGGREGATOR:
         mrt_attribute_aggregator4(record, attributes, attribute);
         break;
+      case BGP_MP_REACH_NLRI:
+        mrt_attribute_mp_reach_nlri(record, attributes, attribute);
+        break;
       default:
     };
     p = attribute->after;
@@ -1041,7 +1046,10 @@ uint8_t *mrt_nlri_consume_one (
   return nlri->trace->afterbyte;
 }
 
-void mrt_nlri_free (struct NLRI_LIST *list) {
+void mrt_free_nlri (
+  struct NLRI_LIST *list
+, uint8_t embedded
+) {
   int i;
 
   if (!list) return;
@@ -1049,7 +1057,8 @@ void mrt_nlri_free (struct NLRI_LIST *list) {
     if (list->prefixes[i].trace) free(list->prefixes[i].trace);
   }
   if (list->error) free(list->error);
-  free(list);
+  if (!embedded) free(list);
+  return;
 }
 
 struct NLRI_LIST *mrt_nlri_deserialize (
@@ -1059,12 +1068,15 @@ struct NLRI_LIST *mrt_nlri_deserialize (
 , uint16_t *length  /* location of bytes setting length for error reporting */
 , uint16_t address_family
 , uint8_t from_attribute_flag /* FALSE if from the outer UPDATE message */
+, size_t prefix_bytes /* add this number of bytes before return */
 ) {
   struct NLRI_LIST *list;
   struct NLRI *nlri;
   int numnlri = 0;
   int faults = 0;
   uint8_t *next;
+  uint8_t *buffer;
+  size_t bufsize;
 
   nlri = (struct NLRI*) malloc (sizeof(struct NLRI) * (afterbyte-firstbyte));
   assert(nlri != NULL);
@@ -1075,10 +1087,12 @@ struct NLRI_LIST *mrt_nlri_deserialize (
     if (nlri[numnlri].fault_flag) faults ++;
   }
 
-  list = (struct NLRI_LIST*) malloc(sizeof(struct NLRI_LIST) +
-    (sizeof(struct NLRI) * numnlri));
-  assert(list != NULL);
-  memset(list, 0, sizeof(struct NLRI_LIST));
+  bufsize = prefix_bytes + sizeof(struct NLRI_LIST) +
+    (sizeof(struct NLRI) * numnlri);
+  buffer = (uint8_t*) malloc(bufsize);
+  assert(buffer != NULL);
+  memset(buffer, 0, sizeof(struct NLRI_LIST) + prefix_bytes);
+  list = (struct NLRI_LIST*) (buffer + prefix_bytes);
   memcpy(list->prefixes, nlri, sizeof(struct NLRI) * numnlri);
   free(nlri);
   list->num_nlri = numnlri;
@@ -1098,7 +1112,7 @@ struct NLRI_LIST *mrt_nlri_deserialize (
     list->error->error_afterbyte = 
       list->error->error_firstbyte + sizeof(uint16_t);
   }
-  return list;
+  return (struct NLRI_LIST*) buffer;
 }
 
 

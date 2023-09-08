@@ -127,8 +127,8 @@ enum bgp4mp_afis { /* address family indicators, uint16_t */
 };
 
 enum bgp4mp_safis { /* sub-AFIs, uint8_t */
-  SAFI_UNICAST = 0x01,
-  SAFI_MULTICAST = 0x02
+  BGP_SAFI_UNICAST = 0x01,
+  BGP_SAFI_MULTICAST = 0x02
 };
 
 # if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -207,6 +207,11 @@ struct BGP_UPDATE_MESSAGE {
   uint8_t type;
   uint16_t withdrawn_routes_length;
   uint8_t routes_and_attributes[];
+  /* uint8_t withdrawn_routes[];
+   * uint16_t attributes_length;
+   * uint8_t attributes[];
+   * uint8_t updated_prefixes[];  nlri_data[]; 
+   */
 } __attribute__ ((__packed__));
 
 extern const uint8_t BGP_MESSAGE_MARKER[16];
@@ -254,17 +259,18 @@ struct MRT_TRACEBACK {
   uint8_t *aftermrt;
     /* First byte after the end of the mrt record */
   uint8_t *firstbyte;
-    /* First byte containing the original data that's decoded inside
-     * the mrt structure above. */
+    /* First byte containing the portion of the raw *mrt data that was
+     * decoded by function creating this trace */
   uint8_t *afterbyte;
     /* Byte following the data decoded. Might be 1 byte past the
      * end of the mrt structure. */
   uint8_t *overflow_firstbyte;
-    /* First byte where faulty information is supposed to be located.
-     * Might be after aftermrt */
+    /* First byte where missing information is supposed to be located but
+     * a buffer length constraint put it outside of our view.
+     * May be after the mrt buffer end at *aftermrt */
   uint8_t *overflow_afterbyte;
-    /* Byte after the last byte where faulty information is located.
-     * Might be after aftermrt */
+    /* Byte after the last byte where missing information is located.
+     * May be after the mrt buffer end at *aftermrt */
   uint8_t *error_firstbyte;
     /* Start of faulty information, such as a length that causes
      * the buffer to overflow. */
@@ -297,8 +303,9 @@ struct NLRI_LIST {
   struct NLRI prefixes[];
 };
 
-struct BGP_MP_REACH_NLRI {
+struct BGP_MP_REACH {
   struct BGP_MP_REACH_HEADER *header;
+  struct BGP_ATTRIBUTE *attribute;
   uint16_t address_family;
   uint8_t safi; /* unicast/multicast */
   union {
@@ -307,7 +314,7 @@ struct BGP_MP_REACH_NLRI {
       struct ipv6_address global_next_hop;
       struct ipv6_address local_next_hop; /* fe80:: */
     };
-  }
+  };
   struct NLRI_LIST l;
 };
 
@@ -333,14 +340,13 @@ struct BGP_ATTRIBUTES {
   uint8_t local_pref_set: 1;
   uint8_t aggregator2_set: 1;
   uint8_t aggregator4_set: 1;
-  uint8_t mp_reach_nlri_set: 1;
-  uint8_t mp_unreach_nlri_set: 1;
   struct ipv4_address next_hop;
   struct ipv4_address aggregator;
   uint16_t aggregator_as2;
   uint32_t aggregator_as4;
   uint32_t med;
   uint32_t local_pref;
+  struct BGP_MP_REACH *mp_reach_nlri;
   struct MRT_TRACEBACK *trace;
   struct BGP_ATTRIBUTE attr[];
 };
@@ -419,12 +425,18 @@ struct NLRI_LIST *mrt_nlri_deserialize (
   struct MRT_RECORD *record
 , uint8_t *firstbyte
 , uint8_t *afterbyte
-, uint16_t *length_bytes
+, uint16_t *length /* location of bytes setting length for error reporting */
 , uint16_t address_family
 , uint8_t from_attribute_flag /* FALSE if from the outer UPDATE message */
+, size_t prefix_bytes /* add this number of bytes before return */
 );
 
-void mrt_nlri_free (struct NLRI_LIST *list);
+void mrt_free_nlri (
+  struct NLRI_LIST *list
+, uint8_t embedded /* *list itself is embedded in another structure,
+                    * so don't try to free it with everything else,
+                    * just free the underlying contents */
+);
 
 void mrt_free_attributes(struct BGP_ATTRIBUTES *attributes);
 
