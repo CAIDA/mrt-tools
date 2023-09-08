@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall -g -O2
+CFLAGS := -Wall -Werror -g -O2
 LDFLAGS :=
 
 targets = misalignment mrt-header
@@ -23,3 +23,5 @@ test: all
 	./misalignment
 	./mrt-header
 	./corrupt-nlri.sh
+	./short.sh
+	./short-header.sh
