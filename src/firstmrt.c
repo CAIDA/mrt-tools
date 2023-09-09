@@ -214,7 +214,7 @@ void print_decode_peer_index (
 
   collector = decode_peer_index (mrtrecord, length, error, sizeof(error));
   if (!collector) {
-    fprintf(stderr,"ERROR: %s\n", error);
+    fprintf(stdout,"ERROR: %s\n", error);
     return;
   }
   printf("%u: BGP collector: " PRI_IPV4 " (%s) has %u peers\n",
@@ -280,20 +280,20 @@ int print_nlri_list (
         PRI_IPV4_V(prefix->ipv4), (uint32_t) prefix->prefix_len);
     }
     if (prefix->fault_flag && prefix->trace) {
-      fprintf (stderr, "ERROR: %s\n  in MRT record at file position %lu\n",
+      fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
         prefix->trace->error, (long unsigned int) bytes_read + 1);
-      mrt_print_trace (stderr, prefix->trace, FALSE);
+      mrt_print_trace (stdout, prefix->trace, FALSE);
       if (prefix->trace->tip) 
-        fprintf (stderr, "Information: %s\n\n", prefix->trace->tip);
+        fprintf (stdout, "Information: %s\n\n", prefix->trace->tip);
       error=TRUE;
     }  
   }
   if (list->error) {
-    fprintf (stderr, "ERROR: %s\n  in MRT record at file position %lu\n",
+    fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
       list->error->error, (long unsigned int) bytes_read + 1);
-    mrt_print_trace (stderr, list->error, FALSE);
+    mrt_print_trace (stdout, list->error, FALSE);
     if (list->error->tip) 
-      fprintf (stderr, "Information: %s\n\n", list->error->tip);
+      fprintf (stdout, "Information: %s\n\n", list->error->tip);
     error=TRUE;
   }
   return error;
@@ -419,7 +419,7 @@ rib_ipv4_unicast *decode_rib_ipv4_unicast (
     }
   }
   if ((void*) p != toolong) {
-    fprintf(stderr,"WARNING: rib entries missing bytes %u<%u\n",
+    fprintf(stdout,"WARNING: rib entries missing bytes %u<%u\n",
       (unsigned int) (toolong - (void*) p), (unsigned int) length);
   }
   return rib;
@@ -435,7 +435,7 @@ void print_rib_ipv4_unicast (
 
   rib = decode_rib_ipv4_unicast(mrtrecord, length, error, sizeof(error));
   if (rib==NULL) {
-    // fprintf(stderr,"ERROR: %s\n", error);
+    // fprintf(stdout,"ERROR: %s\n", error);
     printf("ERROR: %s\n", error);
     return;
   }
@@ -471,11 +471,11 @@ void print_mp_reach_nlri (struct BGP_MP_REACH *reach, uint64_t bytes_read) {
   }
   (void) print_nlri_list("      Prefix: ", &(reach->l), bytes_read);
   if (reach->attribute->fault && (reach->attribute->trace)) {
-    fprintf (stderr, "ERROR: %s\n  in MRT record at file position %lu\n",
+    fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
       reach->attribute->trace->error, (long unsigned int) bytes_read + 1);
-    mrt_print_trace (stderr, reach->attribute->trace, FALSE);
+    mrt_print_trace (stdout, reach->attribute->trace, FALSE);
     if (reach->attribute->trace->tip) 
-      fprintf (stderr, "Information: %s\n\n", reach->attribute->trace->tip);
+      fprintf (stdout, "Information: %s\n\n", reach->attribute->trace->tip);
   }
 }
 
@@ -490,11 +490,11 @@ void print_bgp4mp (
 
   m = mrt_deserialize_bgp4mp_message(record);
   if (m->error) {
-    fprintf (stderr, "ERROR: %s\n  in MRT record at file position %lu\n",
+    fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
       m->error->error, (long unsigned int) bytes_read + 1);
-    mrt_print_trace (stderr, m->error, FALSE);
+    mrt_print_trace (stdout, m->error, FALSE);
     if (m->error->tip) 
-      fprintf (stderr, "Information: %s\n\n", m->error->tip);
+      fprintf (stdout, "Information: %s\n\n", m->error->tip);
     mrt_free_bgp4mp_message(m);
     return;
   }
@@ -530,14 +530,10 @@ void print_bgp4mp (
       printf ("    Local Pref: %u\n", m->attributes->local_pref);
     if (m->attributes->atomic_aggregate) 
       printf ("    Atomic Aggregate = TRUE\n");
-    if (m->attributes->aggregator2_set) 
+    if (m->attributes->aggregator_as) 
       printf ("    Aggregator: " PRI_IPV4 " AS%u\n",
         PRI_IPV4_V(m->attributes->aggregator), 
-        (unsigned int) m->attributes->aggregator_as2);
-    if (m->attributes->aggregator4_set) 
-      printf ("    Aggregator: " PRI_IPV4 " AS%u\n",
-        PRI_IPV4_V(m->attributes->aggregator), 
-        (unsigned int) m->attributes->aggregator_as4);
+        (unsigned int) m->attributes->aggregator_as);
     if (m->attributes->mp_reach_nlri)
       print_mp_reach_nlri(m->attributes->mp_reach_nlri, bytes_read);
     for (i=0; i < m->attributes->numattributes; i++) {
@@ -557,10 +553,8 @@ void print_bgp4mp (
           if (m->attributes->next_hop_set) print = FALSE;
           break;
         case BGP_AGGREGATOR:
-          if (m->attributes->aggregator2_set) print = FALSE;
-          break;
         case BGP_AS4_AGGREGATOR:
-          if (m->attributes->aggregator4_set) print = FALSE;
+          if (m->attributes->aggregator_as) print = FALSE;
           break;
         case BGP_MP_REACH_NLRI:
           if (m->attributes->mp_reach_nlri) print = FALSE;
@@ -573,19 +567,19 @@ void print_bgp4mp (
             (unsigned int) (a->after - ((uint8_t*) a->header))); 
       }
       if (a->fault && a->trace) {
-        fprintf (stderr, "ERROR: %s\n  in MRT record at file position %lu\n",
+        fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
           a->trace->error, (long unsigned int) bytes_read + 1);
-        mrt_print_trace (stderr, a->trace, FALSE);
+        mrt_print_trace (stdout, a->trace, FALSE);
         if (a->trace->tip) 
-          fprintf (stderr, "Information: %s\n\n", a->trace->tip);
+          fprintf (stdout, "Information: %s\n\n", a->trace->tip);
       }  
     } 
     if (m->attributes->fault && m->attributes->trace) {
-      fprintf (stderr, "ERROR: %s\n  in MRT record at file position %lu\n",
+      fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
         m->attributes->trace->error, (long unsigned int) bytes_read + 1);
-      mrt_print_trace (stderr, m->attributes->trace, FALSE);
+      mrt_print_trace (stdout, m->attributes->trace, FALSE);
       if (m->attributes->trace->tip) 
-        fprintf (stderr, "Information: %s\n\n", m->attributes->trace->tip);
+        fprintf (stdout, "Information: %s\n\n", m->attributes->trace->tip);
     }
   }
   mrt_free_bgp4mp_message(m);
@@ -603,11 +597,11 @@ void mrt_print_decode_message (
   // length = record->aftermrt - ((uint8_t*) record->mrt);
   message = mrt_extended_header_process(record);
   if (!message) {
-    fprintf (stderr, "ERROR in MRT record at byte %lu: %s\n",
+    fprintf (stdout, "ERROR in MRT record at byte %lu: %s\n",
       bytes_read + 1, record->trace_microseconds->error);
-    mrt_print_trace (stderr, record->trace_microseconds, FALSE);
+    mrt_print_trace (stdout, record->trace_microseconds, FALSE);
     if (record->trace_read->tip) 
-      fprintf (stderr, "Information: %s\n\n", record->trace_read->tip);
+      fprintf (stdout, "Information: %s\n\n", record->trace_read->tip);
     return;
   }
 
@@ -657,7 +651,7 @@ void mrt_print_decode_message (
         (unsigned int) length);
       break;
     default:
-      fprintf (stderr,
+      fprintf (stdout,
         "ERROR: MRT record at %lu unhandled type %d.%d (%u bytes) at %u\n", 
         bytes_read + 1,
         (int) ntohs(record->mrt->type), (int) ntohs(record->mrt->subtype),
@@ -679,7 +673,7 @@ void readandprintmrtfile (const char *name) {
     file = fileno(stdin);
   }
   if (file<0) {
-    fprintf(stderr,"ERROR: unable to open %s: %s(%d)\n", 
+    fprintf(stdout,"ERROR: unable to open %s: %s(%d)\n", 
       (name)?name:"<stdin>", strerror(errno), errno);
     return;
   }
@@ -691,11 +685,12 @@ void readandprintmrtfile (const char *name) {
     mrt_free_record(record);
   }
   if (record && record->read_failed) {
-    fprintf (stderr, "ERROR: at byte %lu, %s\n",
+    fprintf (stdout, "ERROR: at byte %lu, %s\n",
       bytes_read + 1, record->trace_read->error);
-    mrt_print_trace (stderr, record->trace_read, FALSE);
+    mrt_print_trace (stdout, record->trace_read, FALSE);
     if (record->trace_read->tip) 
-      fprintf (stderr, "Information: %s\n\n", record->trace_read->tip);
+      fprintf (stdout, "Information: %s\n\n", record->trace_read->tip);
+    mrt_free_record(record);
   }
   close (file);
 }

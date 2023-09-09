@@ -492,7 +492,7 @@ void mrt_attribute_aggregator4 (
   char error[100];
   struct ipv4_address ip;
 
-  if (attributes->aggregator4_set) {
+  if (attributes->aggregator_as) {
     snprintf(error, 99, "duplicate AS4_AGGREGATOR attribute");
     error[99]=0;
     attribute->trace = 
@@ -540,16 +540,20 @@ void mrt_attribute_aggregator4 (
     return ;
   }
 
-  attributes->aggregator4_set = TRUE;
-  attributes->aggregator_as4 = ntohl(*((uint32_t*) attribute->content));
+  attributes->aggregator_as = ntohl(*((uint32_t*) attribute->content));
   attributes->aggregator = ip;
   return ;
 }
 
 static const char *mrt_aggregator2_information = 
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
+"Path Attributes section\n"
+"[uint8 flags][uint8 type][uint8 or uint16 length (extended length flag)]\n"
+"[0 or more bytes attribute data]\n"
 "Path Attributes section, part (g) AGGREGATOR\n"
-"[uint16 AS Number][uint32 IP Address]";
+"[uint16 or uint32 AS Number][uint32 IP Address]\n"
+"https://datatracker.ietf.org/doc/html/rfc6793#section-3\n"
+"Will be a 4-byte AS number between 'new' BGP speakers.";
 
 void mrt_attribute_aggregator2 (
   struct MRT_RECORD *record
@@ -558,8 +562,9 @@ void mrt_attribute_aggregator2 (
 ) {
   char error[100];
   struct ipv4_address ip;
+  size_t length;
 
-  if (attributes->aggregator2_set) {
+  if (attributes->aggregator_as) {
     snprintf(error, 99, "duplicate AGGREGATOR attribute");
     error[99]=0;
     attribute->trace = 
@@ -571,17 +576,18 @@ void mrt_attribute_aggregator2 (
     attribute->fault = TRUE;
     return;
   }
-  if (attribute->after - attribute->content != 6) {
+  length = attribute->after - attribute->content;
+  if ((length != 6) && (length != 8)) {
     snprintf(error, 99, 
-        "invalid AGGREGATOR attribute length expecting 6 bytes got %u",
+        "invalid AGGREGATOR attribute length expecting 6 or 8 bytes got %u",
         (unsigned int) (attribute->after - attribute->content));
     error[99]=0;
     attribute->trace = 
       newtraceback(record, error, mrt_aggregator2_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
-    attribute->trace->error_firstbyte = attribute->trace->firstbyte + 1;
-    attribute->trace->error_afterbyte = attribute->after;
+    attribute->trace->error_firstbyte = &(attribute->header->length8);
+    attribute->trace->error_afterbyte = attribute->content;
     if (attribute->after - attribute->content < 4) {
       attribute->trace->overflow_firstbyte = attribute->after;
       attribute->trace->overflow_afterbyte = attribute->content + 4;
@@ -590,6 +596,8 @@ void mrt_attribute_aggregator2 (
     return ;
   }
   ip = *((struct ipv4_address*) (attribute->content + 2));
+  if (length == 8) 
+    ip = *((struct ipv4_address*) (attribute->content + 4));
   if ( (attributes->aggregator.whole != 0) &&
        (attributes->aggregator.whole != ip.whole)) {
     snprintf(error, 99, 
@@ -607,8 +615,9 @@ void mrt_attribute_aggregator2 (
     return ;
   }
 
-  attributes->aggregator2_set = TRUE;
-  attributes->aggregator_as2 = ntohs(*((uint16_t*) attribute->content));
+  if (length == 6) attributes->aggregator_as = 
+    (uint32_t) ntohs(*((uint16_t*) attribute->content));
+  else attributes->aggregator_as = ntohl(*((uint32_t*) attribute->content));
   attributes->aggregator = ip;
   return ;
 }
@@ -895,9 +904,11 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
       default:
     };
     p = attribute->after;
-    attribute->trace = newtraceback(record, NULL, mrt_attribute_information);
-    attribute->trace->firstbyte = (uint8_t*) attribute->header;
-    attribute->trace->afterbyte = p;
+    if (! attribute->trace) {
+      attribute->trace = newtraceback(record, NULL, mrt_attribute_information);
+      attribute->trace->firstbyte = (uint8_t*) attribute->header;
+      attribute->trace->afterbyte = p;
+    }
   }
   if (attributes->fault) { /* buffer overflow */
     snprintf(error, 199, "attributes overflowed buffer length %u",

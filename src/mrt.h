@@ -346,12 +346,9 @@ struct BGP_ATTRIBUTES {
   uint8_t next_hop_set: 1;
   uint8_t med_set: 1;
   uint8_t local_pref_set: 1;
-  uint8_t aggregator2_set: 1;
-  uint8_t aggregator4_set: 1;
   struct ipv4_address next_hop;
   struct ipv4_address aggregator;
-  uint16_t aggregator_as2;
-  uint32_t aggregator_as4;
+  uint32_t aggregator_as;
   uint32_t med;
   uint32_t local_pref;
   struct BGP_MP_REACH *mp_reach_nlri;
