@@ -1118,6 +1118,242 @@ struct NLRI_LIST *mrt_nlri_deserialize (
   return (struct NLRI_LIST*) buffer;
 }
 
+void mrt_free_bgp4mp_message (struct BGP4MP_MESSAGE *m) {
+  if (!m) return;
+  if (m->error) free(m->error);
+  if (m->trace_as) free(m->trace_as);
+  if (m->trace_peerip) free(m->trace_peerip);
+  if (m->withdrawals) mrt_free_nlri(m->withdrawals, FALSE);
+  if (m->nlri) mrt_free_nlri(m->nlri, FALSE);
+  if (m->attributes) mrt_free_attributes(m->attributes);
+  free(m);
+  return;
+}
+
+static const char *mrt_bgp_update_information =
+"https://datatracker.ietf.org/doc/html/rfc4271#section-4.1\n"
+"[16 byte 0xff marker][uint16 length][uint8 type=update]\n"
+"https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
+"[uint16 byte length of withdrawn routes section]\n"
+"[0 or more bytes, withdrawn routes in NLRI prefix format]\n"
+"[uint16 byte length of BGP attributes such as communities]\n"
+"[0 or more bytes, BGP attributes]\n"
+"[0 or more bytes, new/updated routes in NLRI prefix format]\n"
+"The new/updated routes section starts after the BGP attributes (position\n"
+"determined by the uint16 attributes byte length) and continues until the\n"
+"end of the BGP update message (which is also the end of the MRT record).";
+
+static const char *mrt_bgp4mp_message_information =
+"https://datatracker.ietf.org/doc/html/rfc6396#section-4.4.2\n"
+"[uint16 peer AS][uint16 local AS][uint16 interface index]\n"
+"[uint16 address family][4 or 16 bytes peer IP address]\n"
+"[4 or 16 bytes local IP address][BGP UPDATE message]";
+
+static const char *mrt_bgp4mp_message_as4_information =
+"https://datatracker.ietf.org/doc/html/rfc6396#section-4.4.3\n"
+"[uint32 peer AS][uint32 local AS][uint16 interface index]\n"
+"[uint16 address family][4 or 16 bytes peer IP address]\n"
+"[4 or 16 bytes local IP address][BGP UPDATE message]";
+
+
+struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
+/* record->mrt->type == MRT_BGP4MP or MRT_BGP4MP_ET
+ * record->mrt->subtype == BGP4MP_MESSAGE or BGP4MP_MESSAGE_AS4
+ * deserialize the BGP UPDATE message between record->mrt_message and
+ * record->aftermrt */
+  struct MRT_RECORD *record
+) {
+  char error[200];
+  struct BGP4MP_MESSAGE *m; /* deserialized message */
+  size_t message_length, min_length;
+
+  m = (struct BGP4MP_MESSAGE*) malloc (sizeof(*m));
+  assert(m != NULL);
+  memset(m, 0, sizeof(*m));
+
+  /* first make sure we have enough bytes to begin parsing a BGP4MP_MESSAGE */
+  message_length = record->aftermrt - record->mrt_message;
+  min_length = 16 + sizeof(struct BGP_UPDATE_MESSAGE) + 2;
+  if (record->mrt->subtype == BGP4MP_MESSAGE_AS4) min_length += 4;
+  if (message_length < min_length) {
+    snprintf (error, 199,
+        "deserialize_bgp4mp %s message size %lu shorter than minimum %lu",
+        (record->mrt->subtype == BGP4MP_MESSAGE)?"BGP4MP_MESSAGE":
+         "BGP4MP_MESSAGE_AS4", message_length, min_length);
+    error[199]=0;
+    m->error = newtraceback(record, error,
+      (record->mrt->subtype == BGP4MP_MESSAGE)?
+       mrt_bgp4mp_message_information:mrt_bgp4mp_message_as4_information);
+    m->error->firstbyte = record->mrt_message;
+    m->error->afterbyte = record->aftermrt;
+    m->error->overflow_firstbyte = record->aftermrt;
+    m->error->overflow_afterbyte = record->mrt_message + min_length;
+    m->error->error_firstbyte = (uint8_t*) &(record->mrt->length);
+    m->error->error_afterbyte = record->mrt->message;
+    return m;
+  }
+
+  /* next, capture the AS numbers and figure out where to start looking
+   * for the router IP addresses */
+  m->bgp4mp = (struct BGP4MP_MESSAGE_HEADER*) record->mrt_message;
+  m->nlri_afterbyte = record->aftermrt;
+  if (record->mrt->subtype == BGP4MP_MESSAGE)  {
+    m->peeras = (uint32_t) ntohs(m->bgp4mp->peeras2);
+    m->localas = (uint32_t) ntohs(m->bgp4mp->localas2);
+    m->header = &(m->bgp4mp->head2);
+    m->trace_as = newtraceback(record, NULL, mrt_bgp4mp_message_information);
+    m->trace_as->firstbyte = (uint8_t*) m->bgp4mp;
+    m->trace_as->afterbyte = (uint8_t*) m->header;
+  } else { /* BGP4MP_MESSAGE_AS4 */
+    m->peeras = ntohl(m->bgp4mp->peeras4);
+    m->localas = ntohl(m->bgp4mp->localas4);
+    m->header = &(m->bgp4mp->head4);
+    m->trace_as = newtraceback(record, NULL, 
+                    mrt_bgp4mp_message_as4_information);
+    m->trace_as->firstbyte = (uint8_t*) m->bgp4mp;
+    m->trace_as->afterbyte = (uint8_t*) m->header;
+  }
+
+  /* next, capture the router IP addresses. */
+  m->peer_ipv4 = &(m->header->peer4); /* pointer magic also sets peer_ipv6 */
+  switch (m->header->address_family) {
+    case BGP4MP_AFI_IPV6:
+      /* message bigger than the IPv4 minimum, recheck that we have enough
+       * bytes. */
+      min_length += 24;
+      if (message_length < min_length) {
+        snprintf (error, 199, "deserialize_bgp4mp %s IPv6 message "
+          "size %lu shorter than minimum %lu",
+          (record->mrt->subtype == BGP4MP_MESSAGE)?"BGP4MP_MESSAGE":
+           "BGP4MP_MESSAGE_AS4", message_length, min_length);
+        error[199]=0;
+        m->error = newtraceback(record, error,
+          (record->mrt->subtype == BGP4MP_MESSAGE)?
+          mrt_bgp4mp_message_information:mrt_bgp4mp_message_as4_information);
+        m->error->firstbyte = record->mrt_message;
+        m->error->afterbyte = record->aftermrt;
+        m->error->overflow_firstbyte = record->aftermrt;
+        m->error->overflow_afterbyte = record->mrt_message + min_length;
+        m->error->error_firstbyte = (uint8_t*) &(record->mrt->length);
+        m->error->error_afterbyte = record->mrt->message;
+        return m;
+      }
+      m->local_ipv6 = &(m->header->local6);
+      m->bgp = m->header->bgp_message6;
+      m->trace_peerip = newtraceback(record, NULL, 
+         (record->mrt->subtype == BGP4MP_MESSAGE)?
+         mrt_bgp4mp_message_information:mrt_bgp4mp_message_as4_information);
+      m->trace_peerip->firstbyte = (uint8_t*) m->peer_ipv6;
+      m->trace_peerip->afterbyte = (uint8_t*) m->bgp;
+      break;
+    case BGP4MP_AFI_IPV4:
+      m->local_ipv4 = &(m->header->local4);
+      m->bgp = m->header->bgp_message4;
+      m->trace_peerip = newtraceback(record, NULL, 
+         (record->mrt->subtype == BGP4MP_MESSAGE)?
+         mrt_bgp4mp_message_information:mrt_bgp4mp_message_as4_information);
+      m->trace_peerip->firstbyte = (uint8_t*) m->peer_ipv4;
+      m->trace_peerip->afterbyte = (uint8_t*) m->bgp;
+      break;
+    default: /* unknown address family, not IPv4 or IPv6. Abort. */
+      snprintf (error, 199, "deserialize_bgp4mp unknown address family %x",
+        (unsigned int) ntohs(m->header->address_family));
+      error[199]=0;
+      m->error = newtraceback(record, error,
+        (record->mrt->subtype == BGP4MP_MESSAGE)?
+        mrt_bgp4mp_message_information:mrt_bgp4mp_message_as4_information);
+      m->error->firstbyte = (uint8_t*) m->bgp4mp;
+      m->error->afterbyte = record->aftermrt;
+      m->error->error_firstbyte = (uint8_t*) &(m->header->address_family);
+      m->error->error_afterbyte = m->error->error_firstbyte + 2;
+      return m;
+  };
+
+  /* We're up to the actual BGP message embedded in the BGP4MP record */
+  if (memcmp(m->bgp->marker, BGP_MESSAGE_MARKER,
+             sizeof(BGP_MESSAGE_MARKER)) !=0 ) {
+    snprintf (error, 199, "deserialize_bgp4mp bgp marker is not 0xff");
+    error[199]=0;
+    m->error = newtraceback(record, error, mrt_bgp_update_information);
+    m->error->firstbyte = record->mrt_message;
+    m->error->afterbyte = record->aftermrt;
+    m->error->error_firstbyte = (uint8_t*) m->bgp->marker;
+    m->error->error_afterbyte = m->error->error_firstbyte + 16;
+    return m;
+  }
+  if (((uint8_t*)m->bgp) + ntohs(m->bgp->length) != record->aftermrt) {
+    snprintf (error, 199, "deserialize_bgp4mp MRT-derived length %lu bytes"
+      " != with BGP %u bytes",
+      record->aftermrt - record->mrt_message, 
+      (unsigned int) ntohs(m->bgp->length));
+    error[199]=0;
+    m->error = newtraceback(record, error, mrt_bgp_update_information);
+    m->error->firstbyte = (uint8_t*) &(m->bgp->length);
+    m->error->afterbyte = m->error->firstbyte + 2;
+    m->error->error_firstbyte = (uint8_t*) &(record->mrt->length);
+    m->error->error_afterbyte = record->mrt->message;
+    return m;
+  }
+  if (m->bgp->type != 2) {
+    snprintf (error, 199, "deserialize_bgp4mp BGP type %u is not update (2)",
+      (unsigned int) m->bgp->type);
+    error[199]=0;
+    m->error = newtraceback(record, error, mrt_bgp_update_information);
+    m->error->firstbyte = (uint8_t*) m->bgp;
+    m->error->afterbyte = record->aftermrt;
+    m->error->error_firstbyte = &(m->bgp->type);
+    m->error->error_afterbyte = &(m->bgp->type) + 1;
+    return m;
+  }
+  m->withdrawals_firstbyte = m->bgp->routes_and_attributes;
+  m->withdrawals_afterbyte = /* pntr magic sets path_attributes_length too */
+    m->withdrawals_firstbyte + ntohs(m->bgp->withdrawn_routes_length);
+  m->path_attributes_firstbyte = m->withdrawals_afterbyte + 2;
+  if (m->path_attributes_firstbyte > record->aftermrt) {
+    snprintf (error, 199, "deserialize_bgp4mp malformed update withdrawal "
+      "size %u overruns the end of the buffer",
+      (unsigned int) ntohs(m->bgp->withdrawn_routes_length));
+    error[199]=0;
+    m->error = newtraceback(record, error, mrt_bgp_update_information);
+    m->error->firstbyte = m->withdrawals_firstbyte;
+    m->error->afterbyte = record->aftermrt;
+    m->error->overflow_firstbyte = record->aftermrt;
+    m->error->overflow_afterbyte = m->path_attributes_firstbyte;
+    m->error->error_firstbyte = (uint8_t*) &(m->bgp->withdrawn_routes_length);
+    m->error->error_afterbyte = (uint8_t*) 
+      (&(m->bgp->withdrawn_routes_length) + 1);
+    return m;
+  }
+  m->path_attributes_afterbyte = m->path_attributes_firstbyte +
+     ntohs(*(m->path_attributes_length));
+  if (m->path_attributes_afterbyte > record->aftermrt) {
+    snprintf (error, 199, "deserialize_bgp4mp malformed update attributes "
+      "size %u overruns the end of the buffer",
+      (unsigned int) ntohs(*(m->path_attributes_length)));
+    error[199]=0;
+    m->error = newtraceback(record, error, mrt_bgp_update_information);
+    m->error->firstbyte = m->path_attributes_firstbyte;
+    m->error->afterbyte = record->aftermrt;
+    m->error->overflow_firstbyte = record->aftermrt;
+    m->error->overflow_afterbyte = m->path_attributes_afterbyte;
+    m->error->error_firstbyte = (uint8_t*) m->path_attributes_length;
+    m->error->error_afterbyte = m->path_attributes_firstbyte;
+    return m;
+  }
+  /* We have a BGP update message whose core lengths make sense 
+   * Next, deserialize the prefixes and attributes */
+  m->withdrawals = mrt_nlri_deserialize(record,
+    m->withdrawals_firstbyte, m->withdrawals_afterbyte, 
+    &(m->bgp->withdrawn_routes_length),
+    m->header->address_family, FALSE, 0);
+  m->nlri = mrt_nlri_deserialize(record, m->nlri_firstbyte, m->nlri_afterbyte, 
+    m->path_attributes_length, m->header->address_family, FALSE, 0);
+  m->attributes = mrt_extract_attributes(record, m->path_attributes_firstbyte,
+    m->path_attributes_afterbyte, m->header->address_family);
+
+  /* inner errors in those sections are not outer errors, so we're done. */
+  return m;
+}
 
 static const char *mrt_extended_format = 
 "https://datatracker.ietf.org/doc/html/rfc6396#section-3\n"

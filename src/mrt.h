@@ -206,9 +206,11 @@ struct BGP_MP_REACH_HEADER { /* MP_REACH_NLRI attribute */
 
 
 struct BGP_UPDATE_MESSAGE {
+  /* https://datatracker.ietf.org/doc/html/rfc4271#section-4.1 */
   uint8_t marker[16];
   uint16_t length;
   uint8_t type;
+  /* https://datatracker.ietf.org/doc/html/rfc4271#section-4.3 */
   uint16_t withdrawn_routes_length;
   uint8_t routes_and_attributes[];
   /* uint8_t withdrawn_routes[];
@@ -357,29 +359,38 @@ struct BGP_ATTRIBUTES {
   struct BGP_ATTRIBUTE attr[];
 };
 
-struct BGP4MP_RECORD {
-  struct BGP4MP_MESSAGE_HEADER *bgp;
+struct BGP4MP_MESSAGE {
+  struct MRT_TRACEBACK *error; /* general error */
+  struct BGP4MP_MESSAGE_HEADER *bgp4mp;
   uint32_t peeras;
   uint32_t localas;
   struct MRT_TRACEBACK *trace_as;
   struct BGP4MP_MESSAGE_HEADER2 *header;
+  /* header->address_family */
+  union {
+    struct ipv4_address *peer_ipv4;
+    struct ipv6_address *peer_ipv6;
+  };
+  union {
+    struct ipv4_address *local_ipv4;
+    struct ipv6_address *local_ipv6;
+  };
   struct MRT_TRACEBACK *trace_peerip;
-  struct BGP_UPDATE_MESSAGE *bgp_message;
+  struct BGP_UPDATE_MESSAGE *bgp;
   uint8_t *withdrawals_firstbyte;
   union {
     uint8_t *withdrawals_afterbyte;
     uint16_t *path_attributes_length;
   };
-  uint8_t *path_attributes_firtbyte;
+  uint8_t *path_attributes_firstbyte;
   union {
     uint8_t *path_attributes_afterbyte;
     uint8_t *nlri_firstbyte;
   };
   uint8_t *nlri_afterbyte;
-  struct MRT_TRACEBACK *trace_withdrawals;
-  struct MRT_TRACEBACK *trace_pathattributes;
-  uint8_t *nlri_bytes;
-  struct MRT_TRACEBACK *trace_nlri;
+  struct NLRI_LIST *withdrawals;
+  struct NLRI_LIST *nlri;
+  struct BGP_ATTRIBUTES *attributes;
 };
 
 struct MRT_RECORD {
@@ -452,6 +463,17 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
 , uint8_t *afterbyte
 , uint16_t address_family
 );
+
+struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
+/* record->mrt->type == MRT_BGP4MP or MRT_BGP4MP_ET
+ * record->mrt->subtype == BGP4MP_MESSAGE or BGP4MP_MESSAGE_AS4
+ * deserialize the BGP UPDATE message between record->mrt_message and
+ * record->aftermrt */
+  struct MRT_RECORD *record
+);
+
+void mrt_free_bgp4mp_message (struct BGP4MP_MESSAGE *m);
+
 
 #pragma GCC diagnostic ignored "-Waddress-of-packed-member"
 /* This library does lots of type casts where the resulting multibyte

@@ -4,7 +4,7 @@ LDFLAGS :=
 
 targets = misalignment mrt-header
 
-all: $(targets)
+all: $(targets) test
 
 misalignment: misalignment.o
 	$(CC) -o $@ $(LDFLAGS) misalignment.o
@@ -19,7 +19,7 @@ clean:
 .c.o:
 	$(CC) -c $(CFLAGS) $<
 
-test: all
+test: $(targets)
 	./misalignment
 	./mrt-header
 	./corrupt-nlri.sh

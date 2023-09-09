@@ -8,22 +8,6 @@
 #include <errno.h>
 #include <assert.h>
 
-struct DECODED_BGP4MP_MESSAGE {
-  struct MRT_COMMON_HEADER *mrt;
-  struct BGP4MP_MESSAGE_HEADER *bgp;
-  uint32_t peeras;
-  uint32_t localas;
-  struct BGP4MP_MESSAGE_HEADER2 *header;
-  struct BGP_UPDATE_MESSAGE *bgp_message;
-  uint16_t path_attribute_length;
-  uint8_t *path_attrbutes;
-  uint8_t *nlri_bytes;
-  struct NLRI_LIST *withdrawals;
-  struct NLRI_LIST *nlri;
-  struct BGP_ATTRIBUTES *attributes;
-};
-
-
 struct TABLEDUMP_V2_PEER_ENTRY {
   union { /* 3 representations of the one-byte peer_type flags field */
     union {
@@ -470,160 +454,6 @@ extract_attributes(rib->rib_entries[i]);
   free_rib_ipv4_unicast(rib);
 }
 
-void *free_bgp4mp (struct DECODED_BGP4MP_MESSAGE *bgp4mp) {
-  if (!bgp4mp) return NULL;
-  if (bgp4mp->nlri) mrt_free_nlri(bgp4mp->nlri, FALSE);
-  if (bgp4mp->withdrawals) mrt_free_nlri(bgp4mp->withdrawals, FALSE);
-  if (bgp4mp->attributes) mrt_free_attributes(bgp4mp->attributes);
-  free(bgp4mp);
-  return NULL;
-}
-
-struct DECODED_BGP4MP_MESSAGE *decode_bgp4mp (
-  struct MRT_RECORD *record
-, size_t length
-, uint8_t *message
-, char *error
-, size_t errbuflen
-) {
-  size_t message_length;
-  struct DECODED_BGP4MP_MESSAGE *bgp4mp;
-  uint16_t *p;
-  void *aftermrt;
-
-  struct MRT_COMMON_HEADER *mrtrecord = record->mrt;
-  if (error) *error=0;
-  aftermrt = ((void*) mrtrecord) + length;
-
-  bgp4mp = malloc(sizeof(struct DECODED_BGP4MP_MESSAGE));
-  assert(bgp4mp != NULL);
-  memset ((void*) bgp4mp, 0, sizeof(struct DECODED_BGP4MP_MESSAGE));
-  bgp4mp->bgp = (struct BGP4MP_MESSAGE_HEADER*) message;
-  bgp4mp->mrt = mrtrecord;
-  message_length = length - (((void*) message) - ((void*) mrtrecord));
-  if (message_length < 16) {
-    if (error) {
-      snprintf(error,errbuflen-1,"MRT_BGP4MP expecting MRT larger than %lu",
-        message_length);
-      error[errbuflen-1]=0;
-    }
-    return free_bgp4mp(bgp4mp);
-  }
-  if (mrtrecord->subtype == BGP4MP_MESSAGE) {
-    bgp4mp->peeras = (uint32_t) ntohs(bgp4mp->bgp->peeras2);
-    bgp4mp->localas = (uint32_t) ntohs(bgp4mp->bgp->localas2);
-    bgp4mp->header = &(bgp4mp->bgp->head2);
-  } else { /* BGP4MP_MESSAGE_AS4 */ 
-    if (message_length < 20) {
-      if (error) {
-        snprintf(error,errbuflen-1,"MRT_BGP4MP AS4 expecting MRT larger than %d",
-          (int) length);
-        error[errbuflen-1]=0;
-      }
-      return free_bgp4mp(bgp4mp);
-    }
-    bgp4mp->peeras = ntohl(bgp4mp->bgp->peeras4);
-    bgp4mp->localas = ntohl(bgp4mp->bgp->localas4);
-    bgp4mp->header = &(bgp4mp->bgp->head4);
-  }
-  /* remaining message to consume is the trailing part of the header
-   * and the bgp messag itself */
-  message_length = length - (((void*) bgp4mp->header) - ((void*) mrtrecord));
-  switch (bgp4mp->header->address_family) {
-    case BGP4MP_AFI_IPV6:
-      if (message_length < 36) {
-        if (error) {
-          snprintf(error,errbuflen-1,
-            "MRT_BGP4MP expecting IPv6 MRT larger than %lu", message_length);
-          error[errbuflen-1]=0;
-        }
-        return free_bgp4mp(bgp4mp);
-      }
-      bgp4mp->bgp_message = bgp4mp->header->bgp_message6;
-      break;
-    case BGP4MP_AFI_IPV4:
-      bgp4mp->bgp_message = bgp4mp->header->bgp_message4;
-      break;
-    default:
-      if (error) {
-        snprintf(error,errbuflen-1,"MRT_BGP4MP address family %x unknown",
-          (unsigned int) bgp4mp->header->address_family);
-        error[errbuflen-1]=0;
-      }
-      return free_bgp4mp(bgp4mp);
-  }
-  message_length = length - 
-    (((void*) bgp4mp->bgp_message) - ((void*) mrtrecord));
-  if (message_length < sizeof(struct BGP_UPDATE_MESSAGE)) {
-    if (error) {
-      snprintf(error,errbuflen-1,"MRT_BGP4MP update message too short %lu bytes",
-        message_length);
-      error[errbuflen-1]=0;
-    }
-    return free_bgp4mp(bgp4mp);
-  }
-  if (bgp4mp->bgp_message->type != 2) {
-    if (error) {
-      snprintf(error,errbuflen-1,"MRT_BGP4MP expecing update message got type %d",
-        (int) bgp4mp->bgp_message->type);
-      error[errbuflen-1]=0;
-    }
-    return free_bgp4mp(bgp4mp);
-  }
-  if (memcmp(bgp4mp->bgp_message->marker, BGP_MESSAGE_MARKER,
-      sizeof(BGP_MESSAGE_MARKER)) !=0 ) {
-    if (error) {
-      snprintf(error,errbuflen-1,"MRT_BGP4MP invalid marker");
-      error[errbuflen-1]=0;
-    }
-    return free_bgp4mp(bgp4mp);
-  }
-  if ((size_t) ntohs(bgp4mp->bgp_message->length) != message_length) {
-    if (error) {
-      snprintf(error, errbuflen-1,
-        "MRT_BGP4MP update length differs from MRT record length %lu != %lu",
-        (size_t) ntohs(bgp4mp->bgp_message->length), message_length);
-      error[errbuflen-1]=0;
-    }
-    return free_bgp4mp(bgp4mp);
-  }
-  p = (uint16_t*) (bgp4mp->bgp_message->routes_and_attributes +
-    ntohs(bgp4mp->bgp_message->withdrawn_routes_length));
-  if ((void*)(p+1) > aftermrt) {
-    if (error) {
-      snprintf(error, errbuflen-1,
-        "MRT_BGP4MP malformed update path attributes start at %lu after %lu",
-        ((void*) p) - ((void*) mrtrecord), length);
-      error[errbuflen-1]=0;
-    }
-    return free_bgp4mp(bgp4mp);
-  }
-  bgp4mp->withdrawals = mrt_nlri_deserialize(record, 
-    bgp4mp->bgp_message->routes_and_attributes, (uint8_t*) p, 
-    &(bgp4mp->bgp_message->withdrawn_routes_length), 
-    bgp4mp->header->address_family, FALSE, 0);
-
-  bgp4mp->path_attribute_length = ntohs(*p);
-  bgp4mp->path_attrbutes = (uint8_t*) (p+1);
-  bgp4mp->nlri_bytes = bgp4mp->path_attrbutes + bgp4mp->path_attribute_length;
-  if ((void*)(bgp4mp->nlri_bytes) > aftermrt) {
-    if (error) {
-      snprintf(error, errbuflen-1,
-        "MRT_BGP4MP malformed update NLRI starts at %lu after %lu",
-        ((void*) bgp4mp->nlri_bytes) - ((void*) mrtrecord), length);
-      error[errbuflen-1]=0;
-    }
-    return free_bgp4mp(bgp4mp);
-  }
-  bgp4mp->nlri = mrt_nlri_deserialize(record, bgp4mp->nlri_bytes, aftermrt,
-    (uint16_t*) (bgp4mp->path_attrbutes-2), bgp4mp->header->address_family,
-    FALSE, 0);
-  bgp4mp->attributes = mrt_extract_attributes(record, bgp4mp->path_attrbutes,
-    bgp4mp->nlri_bytes, bgp4mp->header->address_family);
-  
-  return bgp4mp;
-}
-
 void print_mp_reach_nlri (struct BGP_MP_REACH *reach, uint64_t bytes_read) {
   printf ("    MP_REACH_NLRI: IPv%s %scast(%u)\n", 
     (reach->address_family == BGP4MP_AFI_IPV4)?"4":"6",
@@ -651,78 +481,89 @@ void print_mp_reach_nlri (struct BGP_MP_REACH *reach, uint64_t bytes_read) {
 
 void print_bgp4mp (
   struct MRT_RECORD *record
-, size_t length
-, uint8_t *message
 , uint64_t bytes_read
 ) {
-  char error[1000];
-  struct DECODED_BGP4MP_MESSAGE *bgp4mp;
+  struct BGP4MP_MESSAGE *m;
   struct BGP_ATTRIBUTE *a;
   int i;
   uint8_t print = TRUE;
 
-  bgp4mp = decode_bgp4mp(record, length, message, error, 999);
-  if (*error) {
-    printf ("%u.%06u: %s\n", (unsigned int) record->seconds,
-              (unsigned int) record->microseconds, error);
-    free_bgp4mp(bgp4mp);
+  m = mrt_deserialize_bgp4mp_message(record);
+  if (m->error) {
+    fprintf (stderr, "ERROR: %s\n  in MRT record at file position %lu\n",
+      m->error->error, (long unsigned int) bytes_read + 1);
+    mrt_print_trace (stderr, m->error, FALSE);
+    if (m->error->tip) 
+      fprintf (stderr, "Information: %s\n\n", m->error->tip);
+    mrt_free_bgp4mp_message(m);
     return;
   }
-printf ("%u.%06u(byte %lu): withdrawn bytes %u, attribute bytes %u, nlri bytes %lu, %s\n",
-  (unsigned int) record->seconds, (unsigned int) record->microseconds,
-  bytes_read + 1, 
-  (unsigned int) ntohs(bgp4mp->bgp_message->withdrawn_routes_length),
-  (unsigned int) bgp4mp->path_attribute_length,
-  (record->aftermrt - bgp4mp->nlri_bytes),
-  (bgp4mp->header->address_family==BGP4MP_AFI_IPV4)?"IPv4":"IPv6" );
+  if (m->header->address_family == BGP4MP_AFI_IPV4) 
+    printf ("%u.%06u(byte %lu): peer AS%u (" PRI_IPV4 ")\n"
+      "  withdrawn bytes %u, attribute bytes %u, nlri bytes %lu, IPv4\n",
+      (unsigned int) record->seconds, (unsigned int) record->microseconds,
+      bytes_read + 1, (unsigned int) m->peeras, PRI_IPV4_V((*(m->peer_ipv4))), 
+      (unsigned int) (m->withdrawals_afterbyte - m->withdrawals_firstbyte),
+      (unsigned int) (m->path_attributes_afterbyte - 
+        m->path_attributes_firstbyte),
+      (m->nlri_afterbyte - m->nlri_firstbyte));
+  else /* BGP4MP_AFI_IPV4 */
+    printf ("%u.%06u(byte %lu): peer AS%u\n"
+      "  (" PRI_IPV6 ")\n"
+      "  withdrawn bytes %u, attribute bytes %u, nlri bytes %lu, IPv6\n",
+      (unsigned int) record->seconds, (unsigned int) record->microseconds,
+      bytes_read + 1, (unsigned int) m->peeras, PRI_IPV6_V((*(m->peer_ipv6))), 
+      (unsigned int) (m->withdrawals_afterbyte - m->withdrawals_firstbyte),
+      (unsigned int) (m->path_attributes_afterbyte - 
+        m->path_attributes_firstbyte),
+      (m->nlri_afterbyte - m->nlri_firstbyte));
+  (void) print_nlri_list("    Prefix: ", m->nlri, bytes_read);
+  (void) print_nlri_list("    Withdraw: ", m->withdrawals, bytes_read);
 
-  (void) print_nlri_list("    Prefix: ", bgp4mp->nlri, bytes_read);
-  (void) print_nlri_list("    Withdraw: ", bgp4mp->withdrawals, bytes_read);
-
-  if (bgp4mp->attributes) {
-    if (bgp4mp->attributes->origin != BGP_ORIGIN_UNSET) 
-      printf ("    Origin: %s\n", bgp_origins[bgp4mp->attributes->origin]);
-    if (bgp4mp->attributes->next_hop_set) 
+  if (m->attributes) {
+    if (m->attributes->origin != BGP_ORIGIN_UNSET) 
+      printf ("    Origin: %s\n", bgp_origins[m->attributes->origin]);
+    if (m->attributes->next_hop_set) 
       printf ("    IPv4 Next Hop: " PRI_IPV4 "\n",
-        PRI_IPV4_V(bgp4mp->attributes->next_hop));
-    if (bgp4mp->attributes->local_pref_set) 
-      printf ("    Local Pref: %u\n", bgp4mp->attributes->local_pref);
-    if (bgp4mp->attributes->atomic_aggregate) 
+        PRI_IPV4_V(m->attributes->next_hop));
+    if (m->attributes->local_pref_set) 
+      printf ("    Local Pref: %u\n", m->attributes->local_pref);
+    if (m->attributes->atomic_aggregate) 
       printf ("    Atomic Aggregate = TRUE\n");
-    if (bgp4mp->attributes->aggregator2_set) 
+    if (m->attributes->aggregator2_set) 
       printf ("    Aggregator: " PRI_IPV4 " AS%u\n",
-        PRI_IPV4_V(bgp4mp->attributes->aggregator), 
-        (unsigned int) bgp4mp->attributes->aggregator_as2);
-    if (bgp4mp->attributes->aggregator4_set) 
+        PRI_IPV4_V(m->attributes->aggregator), 
+        (unsigned int) m->attributes->aggregator_as2);
+    if (m->attributes->aggregator4_set) 
       printf ("    Aggregator: " PRI_IPV4 " AS%u\n",
-        PRI_IPV4_V(bgp4mp->attributes->aggregator), 
-        (unsigned int) bgp4mp->attributes->aggregator_as4);
-    if (bgp4mp->attributes->mp_reach_nlri)
-      print_mp_reach_nlri(bgp4mp->attributes->mp_reach_nlri, bytes_read);
-    for (i=0; i < bgp4mp->attributes->numattributes; i++) {
-      a = &(bgp4mp->attributes->attr[i]);
+        PRI_IPV4_V(m->attributes->aggregator), 
+        (unsigned int) m->attributes->aggregator_as4);
+    if (m->attributes->mp_reach_nlri)
+      print_mp_reach_nlri(m->attributes->mp_reach_nlri, bytes_read);
+    for (i=0; i < m->attributes->numattributes; i++) {
+      a = &(m->attributes->attr[i]);
       print = TRUE;
       switch (a->type) {
         case BGP_ORIGIN:
-          if (bgp4mp->attributes->origin != BGP_ORIGIN_UNSET) print = FALSE;
+          if (m->attributes->origin != BGP_ORIGIN_UNSET) print = FALSE;
           break;
         case BGP_LOCAL_PREF:
-          if (bgp4mp->attributes->local_pref_set) print = FALSE;
+          if (m->attributes->local_pref_set) print = FALSE;
           break;
         case BGP_ATOMIC_AGGREGATE:
-          if (bgp4mp->attributes->atomic_aggregate) print = FALSE;
+          if (m->attributes->atomic_aggregate) print = FALSE;
           break;
         case BGP_NEXT_HOP:
-          if (bgp4mp->attributes->next_hop_set) print = FALSE;
+          if (m->attributes->next_hop_set) print = FALSE;
           break;
         case BGP_AGGREGATOR:
-          if (bgp4mp->attributes->aggregator2_set) print = FALSE;
+          if (m->attributes->aggregator2_set) print = FALSE;
           break;
         case BGP_AS4_AGGREGATOR:
-          if (bgp4mp->attributes->aggregator4_set) print = FALSE;
+          if (m->attributes->aggregator4_set) print = FALSE;
           break;
         case BGP_MP_REACH_NLRI:
-          if (bgp4mp->attributes->mp_reach_nlri) print = FALSE;
+          if (m->attributes->mp_reach_nlri) print = FALSE;
           break;
         default:
       };
@@ -739,17 +580,16 @@ printf ("%u.%06u(byte %lu): withdrawn bytes %u, attribute bytes %u, nlri bytes %
           fprintf (stderr, "Information: %s\n\n", a->trace->tip);
       }  
     } 
-    if (bgp4mp->attributes->fault && bgp4mp->attributes->trace) {
+    if (m->attributes->fault && m->attributes->trace) {
       fprintf (stderr, "ERROR: %s\n  in MRT record at file position %lu\n",
-        bgp4mp->attributes->trace->error, (long unsigned int) bytes_read + 1);
-      mrt_print_trace (stderr, bgp4mp->attributes->trace, FALSE);
-      if (bgp4mp->attributes->trace->tip) 
-        fprintf (stderr, "Information: %s\n\n", bgp4mp->attributes->trace->tip);
+        m->attributes->trace->error, (long unsigned int) bytes_read + 1);
+      mrt_print_trace (stderr, m->attributes->trace, FALSE);
+      if (m->attributes->trace->tip) 
+        fprintf (stderr, "Information: %s\n\n", m->attributes->trace->tip);
     }
   }
-  free_bgp4mp(bgp4mp);
+  mrt_free_bgp4mp_message(m);
   return;
-  
 }
 
 void mrt_print_decode_message (
@@ -796,7 +636,7 @@ void mrt_print_decode_message (
       switch (record->mrt->subtype) {
         case BGP4MP_MESSAGE:
         case BGP4MP_MESSAGE_AS4:
-          print_bgp4mp(record, length, message, bytes_read);
+          print_bgp4mp(record, bytes_read);
           break;
         case BGP4MP_STATE_CHANGE:
         case BGP4MP_STATE_CHANGE_AS4:
