@@ -779,6 +779,54 @@ void mrt_attribute_origin (
   return;
 }
 
+static const char *mrt_path_attribute_information = 
+"https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
+"Path Attributes section, part (b) AS_PATH\n"
+"[path segment][path segment][...] where a path segment is\n"
+"[uint8 type][uint8 number of ASes in segment][N x uint16 number of ASes]\n"
+"  ...or... \n"
+"https://datatracker.ietf.org/doc/html/rfc6793#section-3\n"
+"[path segment][path segment][...] where a path segment is\n"
+"[uint8 type][uint8 number of ASes in segment][N x uint32 number of ASes]\n"
+"";
+
+uint8_t mrt_check_as_path_four_bytes(struct BGP_ATTRIBUTE *attribute) {
+/* Check if the attribute contains an AS_PATH using 4-byte AS numbers.
+ * If it decodes to exactly the number of bytes in the buffer then yes.
+ * Otherwise no.
+ */
+  uint8_t *p = attribute->content;
+  struct BGP_AS_PATH_SEGMENT *segment;
+  size_t bytes;
+
+  while (attribute->after - p >= 2) {
+    segment = (struct BGP_AS_PATH_SEGMENT*) p;
+    if ((segment->type != BGP_AS_SET) && (segment->type != BGP_AS_SEQUENCE))
+      return 0;
+    bytes = 4 * ((size_t) segment->ascount);
+    p += sizeof(struct BGP_AS_PATH_SEGMENT) + bytes;
+  }
+  if (p > attribute->after) return 0;
+
+  return 1;
+}
+
+void mrt_attribute_path (
+  struct MRT_RECORD *record
+, struct BGP_ATTRIBUTES *attributes
+, struct BGP_ATTRIBUTE *attribute
+, uint8_t fourbyteas
+) {
+  char error[100];
+
+  if (!fourbyteas) fourbyteas = mrt_check_as_path_four_bytes(attribute);
+ 
+  // remove remaining stuff when function is complete 
+  // it's just there to make the warnings go away
+  error[0]=mrt_path_attribute_information[0];
+  error[1]=error[0];
+  return;
+}
 
 static const char *mrt_update_information =
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"

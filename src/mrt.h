@@ -131,6 +131,12 @@ enum bgp4mp_safis { /* Subsequent address family indicators, uint8_t */
   BGP_SAFI_MULTICAST = 0x02
 };
 
+/* https://datatracker.ietf.org/doc/html/rfc4271#section-4.3 AS_PATH types */
+enum bgp4mp_as_path_segment_types {
+  BGP_AS_SET = 0x01,
+  BGP_AS_SEQUENCE = 0x02
+};
+
 # if __BYTE_ORDER == __LITTLE_ENDIAN
 #define htonll(x) (((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
 #define ntohll(x) (((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
@@ -325,6 +331,12 @@ struct BGP_MP_REACH { /* decoded MP_REACH_NLRI attribute */
   struct NLRI_LIST l;
 };
 
+struct BGP_AS_PATH_SEGMENT {
+  uint8_t type;
+  uint8_t ascount;
+  uint32_t as4_list[];
+} __attribute__ ((__packed__));
+
 struct BGP_ATTRIBUTE {
   struct BGP_ATTRIBUTE_HEADER *header;
   uint8_t *content; /* after header, NULL if the header is short */
@@ -388,6 +400,17 @@ struct BGP4MP_MESSAGE {
   struct NLRI_LIST *withdrawals;
   struct NLRI_LIST *nlri;
   struct BGP_ATTRIBUTES *attributes;
+  uint8_t as2_message_format; // see as2_message_format_flag below
+};
+
+/* Does the BGP4_MP message use 2-byte or 4-byte AS numbers in the AS Path
+ * and aggregator attributes? It depends on the negotiated BGP extensions
+ * in the BGP session, and the MRT record does not record what those are.
+ * We have to infer the information. */
+enum as2_message_format_flag {
+  AS2_FORMAT_UNKNOWN = 0,
+  AS2_FORMAT_YES = 1,
+  AS2_FORMAT_NO = 2
 };
 
 struct MRT_RECORD {

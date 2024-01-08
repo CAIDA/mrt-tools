@@ -7,6 +7,16 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <assert.h>
+#include <argp.h>
+
+const char *argp_program_version = "firstmrt 1.0";
+struct OPTIONS {
+  int explain;
+  int trace;
+  int badonly;
+  int quiet;
+  int count;
+};
 
 struct TABLEDUMP_V2_PEER_ENTRY {
   union { /* 3 representations of the one-byte peer_type flags field */
@@ -590,6 +600,7 @@ void mrt_print_decode_message (
   struct MRT_RECORD *record
 , size_t length
 , uint64_t bytes_read
+, const struct OPTIONS *options
 ) {
   uint8_t *message;
 
@@ -603,6 +614,14 @@ void mrt_print_decode_message (
     if (record->trace_read->tip) 
       fprintf (stdout, "Information: %s\n\n", record->trace_read->tip);
     return;
+  }
+  if (options->trace) {
+    if (record->trace_microseconds) {
+      fprintf (stdout, "  Extended MRT record with microseconds precision\n");
+      mrt_print_trace (stdout, record->trace_microseconds, FALSE);
+      if (options->explain) fprintf (stdout, "Information: %s\n\n",
+          record->trace_microseconds->tip);
+    }
   }
 
   switch (record->mrt->type) {
@@ -661,7 +680,7 @@ void mrt_print_decode_message (
   return ;
 }
 
-void readandprintmrtfile (const char *name) {
+void readandprintmrtfile (const char *name, const struct OPTIONS *options) {
   int file;
   struct MRT_RECORD *record;
   uint64_t bytes_read = 0;
@@ -678,9 +697,18 @@ void readandprintmrtfile (const char *name) {
     return;
   }
   while ((record = mrt_read_record(file))) {
-    if (record->read_failed) break;
     length = record->aftermrt - ((uint8_t*) record->mrt);
-    mrt_print_decode_message (record, length, bytes_read);
+    if (options->trace && record->trace_read) {
+      fprintf (stdout, "Trace MRT record at byte %lu:\n", bytes_read + 1);
+      fprintf (stdout, "  Read MRT record at byte %lu size %lu:\n",
+        bytes_read + 1, length);
+      mrt_print_trace (stdout, record->trace_read, TRUE);
+      if (options->explain) fprintf (stdout, "Information: %s\n\n",
+          record->trace_read->tip);
+    }
+    if (record->read_failed) break;
+    // if (!options->badonly || record->numerrors)
+    mrt_print_decode_message (record, length, bytes_read, options);
     bytes_read += (uint64_t) length;
     mrt_free_record(record);
   }
@@ -692,6 +720,7 @@ void readandprintmrtfile (const char *name) {
       fprintf (stdout, "Information: %s\n\n", record->trace_read->tip);
     mrt_free_record(record);
   }
+  if (options->explain) fprintf (stdout, "Reached end of file.\n");
   close (file);
 }
 
@@ -723,13 +752,84 @@ void tryit (void) {
   exit(1);
 }
 
+static error_t
+parse_opt (int key, char *arg, struct argp_state *state)
+/* callback from argp_parse which handles a single command line option */
+{
+  /* Get the input argument from argp_parse, which we
+     know is a pointer to our arguments structure. */
+  struct OPTIONS *options = (struct OPTIONS*) state->input;
+
+  switch (key) {
+    case 'e':
+      if (options->quiet) {
+        printf("\n--quiet and --explain are mutually exclusive.\n");
+        argp_usage(state);
+      }
+      options->explain = TRUE;
+    case 't':
+      options->trace = TRUE;
+      break;
+    case 'q':
+      if (options->explain) {
+        printf("\n--quiet and --explain are mutually exclusive.\n");
+        argp_usage(state);
+      }
+      options->quiet = TRUE;
+      break;
+    case 'b':
+      options->badonly = TRUE;
+      break;
+    case 'c':
+      options->count = TRUE;
+      break;
+    case ARGP_KEY_ARG:
+      argp_usage(state);
+      // not reached
+    case ARGP_KEY_END:
+      break;
+    default:
+      return ARGP_ERR_UNKNOWN;
+  };
+  return 0;
+}
+
 int main (int argc, char **argv) {
   int i;
+  struct OPTIONS options = {
+    .explain = FALSE,
+    .trace = FALSE,
+    .badonly = FALSE,
+    .quiet = FALSE,
+    .count = FALSE
+  };
+  struct argp_option argp_options[] = {
+    {"explain",  'e', 0,      0,  
+      "Verbosely explain the contents of each MRT record." },
+    {"trace",    't', 0,      0,  
+      "Trace decoded MRT record to the bytes in the file." },
+    {"quiet",    'q', 0,      0,  
+      "Trace but do not verbosely explain errors in MRT records." },
+    {"bad",      'b', 0,      0,  
+      "Only display MRT records containing errors." },
+    {"count",    'c', 0,      0,  
+      "Suppress record output. Count the number of bad, correct and total "
+      "MRT entries. Return non-zero if the file contains at least one bad "
+      "MR entry." },
+    { 0 }
+  };
+  char args_doc[] = "";
+  char argp_doc[] = 
+    "firstmrt - read and explain the contents of a BGP MRT file";
+  struct argp argp_parser = 
+    { argp_options, parse_opt, args_doc, argp_doc };
+
+  argp_parse(&argp_parser, argc, argv, 0, 0, &options);
 
   // tryit();
   sanitycheck();
   /* readandprintmrtfile("routeviews.route-views2.ribs.1685318400"); */
-  readandprintmrtfile(NULL);
+  readandprintmrtfile(NULL, &options);
   for (i=0; i<256; i++) {
     if (attributes_seen[i] > 0) printf("Attribute %i seen %u times\n", 
       i, (unsigned int) attributes_seen[i]);
