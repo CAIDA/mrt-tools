@@ -18,6 +18,13 @@ struct OPTIONS {
   int count;
 };
 
+struct STATS {
+  int num_error_records;
+  int num_unknown_records;
+  int num_records;
+  uint32_t attributes_seen[256];
+};
+
 struct TABLEDUMP_V2_PEER_ENTRY {
   union { /* 3 representations of the one-byte peer_type flags field */
     union {
@@ -101,8 +108,6 @@ typedef struct {
 typedef struct {
   struct MRT_COMMON_HEADER *mrt;
 } decoded_mrt;
-
-uint32_t attributes_seen[256] = {};
 
 void free_collector (collector_t *collector) {
   if (collector) {
@@ -274,6 +279,7 @@ int print_nlri_list (
   char *saybefore
 , struct NLRI_LIST *list
 , uint64_t bytes_read
+, const struct OPTIONS *options
 ) {
   int i, error=FALSE;
   struct NLRI *prefix;
@@ -293,23 +299,27 @@ int print_nlri_list (
       fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
         prefix->trace->error, (long unsigned int) bytes_read + 1);
       mrt_print_trace (stdout, prefix->trace, FALSE);
-      if (prefix->trace->tip) 
+      if (prefix->trace->tip && !options->quiet)  
         fprintf (stdout, "Information: %s\n\n", prefix->trace->tip);
       error=TRUE;
-    }  
+    } else if (prefix->trace && options->trace) {
+      mrt_print_trace (stdout, prefix->trace, FALSE);
+      if (options->explain && prefix->trace->tip)
+        fprintf (stdout, "Information: %s\n\n", prefix->trace->tip);
+    }
   }
   if (list->error) {
     fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
       list->error->error, (long unsigned int) bytes_read + 1);
     mrt_print_trace (stdout, list->error, FALSE);
-    if (list->error->tip) 
+    if (list->error->tip && !options->quiet) 
       fprintf (stdout, "Information: %s\n\n", list->error->tip);
     error=TRUE;
   }
   return error;
 }
 
-void extract_attributes (struct RIB_ENTRY *rib) {
+void extract_attributes (struct RIB_ENTRY *rib, struct STATS *stats) {
   void *endp;
   struct BGP_ATTRIBUTE_HEADER *attribute;
   uint16_t length;
@@ -345,7 +355,7 @@ void extract_attributes (struct RIB_ENTRY *rib) {
     printf ("    found attribute %u flags 0x%x length %u\n",
       (unsigned int) attribute->type, (unsigned int) attribute->flags,
       (unsigned int) length); 
-    attributes_seen[(int) attribute->type] ++;
+    stats->attributes_seen[(int) attribute->type] ++;
     attribute = (struct BGP_ATTRIBUTE_HEADER*) (p + length);
   }
   return;
@@ -438,6 +448,7 @@ rib_ipv4_unicast *decode_rib_ipv4_unicast (
 void print_rib_ipv4_unicast (
   struct MRT_COMMON_HEADER *mrtrecord
 , size_t length
+, struct STATS *stats
 ) {
   char error[1000];
   rib_ipv4_unicast *rib;
@@ -459,12 +470,16 @@ void print_rib_ipv4_unicast (
       (int) (((long long int) ntohl(rib->rib_entries[i]->originated_time)) -
       ((long long int) ntohl(mrtrecord->timestamp_seconds))),
       (unsigned int) ntohs(rib->rib_entries[i]->attribute_length));
-extract_attributes(rib->rib_entries[i]);
+    extract_attributes(rib->rib_entries[i], stats);
   }
   free_rib_ipv4_unicast(rib);
 }
 
-void print_mp_reach_nlri (struct BGP_MP_REACH *reach, uint64_t bytes_read) {
+void print_mp_reach_nlri (
+  struct BGP_MP_REACH *reach
+, uint64_t bytes_read
+, const struct OPTIONS *options
+) {
   printf ("    MP_REACH_NLRI: IPv%s %scast(%u)\n", 
     (reach->address_family == BGP4MP_AFI_IPV4)?"4":"6",
     (reach->safi == BGP_SAFI_MULTICAST)?"Multi":
@@ -479,7 +494,7 @@ void print_mp_reach_nlri (struct BGP_MP_REACH *reach, uint64_t bytes_read) {
   } else { /* BGP4MP_AFI_IPV4 */
     printf("      Next Hop: " PRI_IPV4 "\n", PRI_IPV4_V(reach->next_hop));
   }
-  (void) print_nlri_list("      Prefix: ", &(reach->l), bytes_read);
+  (void) print_nlri_list("      Prefix: ", &(reach->l), bytes_read, options);
   if (reach->attribute->fault && (reach->attribute->trace)) {
     fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
       reach->attribute->trace->error, (long unsigned int) bytes_read + 1);
@@ -492,22 +507,25 @@ void print_mp_reach_nlri (struct BGP_MP_REACH *reach, uint64_t bytes_read) {
 void print_bgp4mp (
   struct MRT_RECORD *record
 , uint64_t bytes_read
+, struct BGP4MP_MESSAGE *m
+, const struct OPTIONS *options
+, struct STATS *stats
 ) {
-  struct BGP4MP_MESSAGE *m;
   struct BGP_ATTRIBUTE *a;
   int i;
   uint8_t print = TRUE;
 
-  m = mrt_deserialize_bgp4mp_message(record);
+  if (options->count) return; // only print final count
   if (m->error) {
     fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
       m->error->error, (long unsigned int) bytes_read + 1);
     mrt_print_trace (stdout, m->error, FALSE);
-    if (m->error->tip) 
+    if (m->error->tip && !options->quiet) 
       fprintf (stdout, "Information: %s\n\n", m->error->tip);
-    mrt_free_bgp4mp_message(m);
     return;
   }
+  // only print records with errors
+  if (!record->numerrors && options->badonly) return; 
   if (m->header->address_family == BGP4MP_AFI_IPV4) 
     printf ("%u.%06u(byte %lu): peer AS%u (" PRI_IPV4 ")\n"
       "  withdrawn bytes %u, attribute bytes %u, nlri bytes %lu, IPv4\n",
@@ -527,8 +545,8 @@ void print_bgp4mp (
       (unsigned int) (m->path_attributes_afterbyte - 
         m->path_attributes_firstbyte),
       (m->nlri_afterbyte - m->nlri_firstbyte));
-  (void) print_nlri_list("    Prefix: ", m->nlri, bytes_read);
-  (void) print_nlri_list("    Withdraw: ", m->withdrawals, bytes_read);
+  (void) print_nlri_list("    Prefix: ", m->nlri, bytes_read, options);
+  (void) print_nlri_list("    Withdraw: ", m->withdrawals, bytes_read, options);
 
   if (m->attributes) {
     if (m->attributes->origin != BGP_ORIGIN_UNSET) 
@@ -545,7 +563,7 @@ void print_bgp4mp (
         PRI_IPV4_V(m->attributes->aggregator), 
         (unsigned int) m->attributes->aggregator_as);
     if (m->attributes->mp_reach_nlri)
-      print_mp_reach_nlri(m->attributes->mp_reach_nlri, bytes_read);
+      print_mp_reach_nlri(m->attributes->mp_reach_nlri, bytes_read, options);
     for (i=0; i < m->attributes->numattributes; i++) {
       a = &(m->attributes->attr[i]);
       print = TRUE;
@@ -580,7 +598,7 @@ void print_bgp4mp (
         fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
           a->trace->error, (long unsigned int) bytes_read + 1);
         mrt_print_trace (stdout, a->trace, FALSE);
-        if (a->trace->tip) 
+        if (a->trace->tip && !options->quiet) 
           fprintf (stdout, "Information: %s\n\n", a->trace->tip);
       }  
     } 
@@ -588,11 +606,10 @@ void print_bgp4mp (
       fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
         m->attributes->trace->error, (long unsigned int) bytes_read + 1);
       mrt_print_trace (stdout, m->attributes->trace, FALSE);
-      if (m->attributes->trace->tip) 
+      if (m->attributes->trace->tip && !options->quiet) 
         fprintf (stdout, "Information: %s\n\n", m->attributes->trace->tip);
     }
   }
-  mrt_free_bgp4mp_message(m);
   return;
 }
 
@@ -601,8 +618,10 @@ void mrt_print_decode_message (
 , size_t length
 , uint64_t bytes_read
 , const struct OPTIONS *options
+, struct STATS *stats
 ) {
   uint8_t *message;
+  struct BGP4MP_MESSAGE *bgp_message;
 
   record->seconds = ntohl(record->mrt->timestamp_seconds);
   // length = record->aftermrt - ((uint8_t*) record->mrt);
@@ -611,19 +630,11 @@ void mrt_print_decode_message (
     fprintf (stdout, "ERROR in MRT record at byte %lu: %s\n",
       bytes_read + 1, record->trace_microseconds->error);
     mrt_print_trace (stdout, record->trace_microseconds, FALSE);
-    if (record->trace_read->tip) 
+    if (record->trace_read->tip && !options->quiet) 
       fprintf (stdout, "Information: %s\n\n", record->trace_read->tip);
+    stats->num_error_records ++;
     return;
   }
-  if (options->trace) {
-    if (record->trace_microseconds) {
-      fprintf (stdout, "  Extended MRT record with microseconds precision\n");
-      mrt_print_trace (stdout, record->trace_microseconds, FALSE);
-      if (options->explain) fprintf (stdout, "Information: %s\n\n",
-          record->trace_microseconds->tip);
-    }
-  }
-
   switch (record->mrt->type) {
     case MRT_TABLE_DUMP_V2:
       switch (record->mrt->subtype) {
@@ -635,13 +646,14 @@ void mrt_print_decode_message (
             (unsigned int) ntohl(record->mrt->timestamp_seconds),
             (int) ntohs(record->mrt->subtype),
             (unsigned int) length);
-          print_rib_ipv4_unicast(record->mrt, length);
+          print_rib_ipv4_unicast(record->mrt, length, stats);
           break;
         default:
           printf ("%u: unrecognized BGP dump %d (%u bytes)\n", 
             (unsigned int) ntohl(record->mrt->timestamp_seconds),
             (int) ntohs(record->mrt->subtype),
             (unsigned int) length);
+          stats->num_unknown_records ++;
       }
       break;
     case MRT_BGP4MP_ET:
@@ -649,18 +661,23 @@ void mrt_print_decode_message (
       switch (record->mrt->subtype) {
         case BGP4MP_MESSAGE:
         case BGP4MP_MESSAGE_AS4:
-          print_bgp4mp(record, bytes_read);
+          bgp_message = mrt_deserialize_bgp4mp_message(record);
+          print_bgp4mp(record, bytes_read, bgp_message, options, stats);
+          mrt_free_bgp4mp_message(bgp_message);
           break;
         case BGP4MP_STATE_CHANGE:
         case BGP4MP_STATE_CHANGE_AS4:
         case BGP4MP_MESSAGE_LOCAL:
         case BGP4MP_MESSAGE_AS4_LOCAL:
         default:
-          printf ("%u.%06u: unhandled MRT_BGP4MP update subtype %d (%u bytes)\n", 
-            (unsigned int) record->seconds,
-            (unsigned int) record->microseconds,
-            (int) ntohs(record->mrt->subtype),
-            (unsigned int) length);
+          if (!options->count)
+            printf ("%u.%06u: unhandled MRT_BGP4MP update subtype %d "
+              "(%u bytes)\n", 
+              (unsigned int) record->seconds,
+              (unsigned int) record->microseconds,
+              (int) ntohs(record->mrt->subtype),
+              (unsigned int) length);
+          stats->num_unknown_records ++;
       }
       break;
     case MRT_TABLE_DUMP:
@@ -668,19 +685,36 @@ void mrt_print_decode_message (
         (unsigned int) record->seconds,
         (int) ntohs(record->mrt->type), (int) ntohs(record->mrt->subtype),
         (unsigned int) length);
+      stats->num_unknown_records ++;
       break;
     default:
-      fprintf (stdout,
+      if (!options->count)
+       fprintf (stdout,
         "ERROR: MRT record at %lu unhandled type %d.%d (%u bytes) at %u\n", 
         bytes_read + 1,
         (int) ntohs(record->mrt->type), (int) ntohs(record->mrt->subtype),
         (unsigned int) length, (unsigned int) record->seconds
         );
+      stats->num_unknown_records ++;
   }
+  if (options->trace && (!options->badonly || record->numerrors)) {
+    if (record->trace_microseconds) {
+      fprintf (stdout, "  Extended MRT record with microseconds precision\n");
+      mrt_print_trace (stdout, record->trace_microseconds, FALSE);
+      if (options->explain) fprintf (stdout, "Information: %s\n\n",
+          record->trace_microseconds->tip);
+    }
+  }
+
+  if (record->numerrors) stats->num_error_records ++;
   return ;
 }
 
-void readandprintmrtfile (const char *name, const struct OPTIONS *options) {
+void readandprintmrtfile (
+  const char *name
+, const struct OPTIONS *options
+, struct STATS *stats
+) {
   int file;
   struct MRT_RECORD *record;
   uint64_t bytes_read = 0;
@@ -697,8 +731,9 @@ void readandprintmrtfile (const char *name, const struct OPTIONS *options) {
     return;
   }
   while ((record = mrt_read_record(file))) {
+    stats->num_records ++;
     length = record->aftermrt - ((uint8_t*) record->mrt);
-    if (options->trace && record->trace_read) {
+    if (options->trace && !options->badonly && record->trace_read) {
       fprintf (stdout, "Trace MRT record at byte %lu:\n", bytes_read + 1);
       fprintf (stdout, "  Read MRT record at byte %lu size %lu:\n",
         bytes_read + 1, length);
@@ -708,7 +743,15 @@ void readandprintmrtfile (const char *name, const struct OPTIONS *options) {
     }
     if (record->read_failed) break;
     // if (!options->badonly || record->numerrors)
-    mrt_print_decode_message (record, length, bytes_read, options);
+    mrt_print_decode_message (record, length, bytes_read, options, stats);
+    if (options->trace && options->badonly && record->trace_read 
+        && record->numerrors) {
+      fprintf (stdout, "  Read MRT record at byte %lu size %lu:\n",
+        bytes_read + 1, length);
+      mrt_print_trace (stdout, record->trace_read, TRUE);
+      if (options->explain) fprintf (stdout, "Information: %s\n\n",
+          record->trace_read->tip);
+    }
     bytes_read += (uint64_t) length;
     mrt_free_record(record);
   }
@@ -719,6 +762,7 @@ void readandprintmrtfile (const char *name, const struct OPTIONS *options) {
     if (record->trace_read->tip) 
       fprintf (stdout, "Information: %s\n\n", record->trace_read->tip);
     mrt_free_record(record);
+    stats->num_error_records ++;
   }
   if (options->explain) fprintf (stdout, "Reached end of file.\n");
   close (file);
@@ -759,7 +803,7 @@ parse_opt (int key, char *arg, struct argp_state *state)
   /* Get the input argument from argp_parse, which we
      know is a pointer to our arguments structure. */
   struct OPTIONS *options = (struct OPTIONS*) state->input;
-
+  
   switch (key) {
     case 'e':
       if (options->quiet) {
@@ -803,6 +847,12 @@ int main (int argc, char **argv) {
     .quiet = FALSE,
     .count = FALSE
   };
+  struct STATS stats = {
+    .num_error_records = 0,
+    .num_unknown_records = 0,
+    .num_records = 0,
+    .attributes_seen = {}
+  };
   struct argp_option argp_options[] = {
     {"explain",  'e', 0,      0,  
       "Verbosely explain the contents of each MRT record." },
@@ -829,11 +879,14 @@ int main (int argc, char **argv) {
   // tryit();
   sanitycheck();
   /* readandprintmrtfile("routeviews.route-views2.ribs.1685318400"); */
-  readandprintmrtfile(NULL, &options);
+  readandprintmrtfile(NULL, &options, &stats);
   for (i=0; i<256; i++) {
-    if (attributes_seen[i] > 0) printf("Attribute %i seen %u times\n", 
-      i, (unsigned int) attributes_seen[i]);
+    if (stats.attributes_seen[i] > 0) printf("Attribute %i seen %u times\n", 
+      i, (unsigned int) stats.attributes_seen[i]);
   }
+  printf("Number of (error / unknown / total) MRT records: %i / %i / %i\n",
+    stats.num_error_records, stats.num_unknown_records, stats.num_records);
+  if (stats.num_error_records) return 1;
   return 0;
 }
 
