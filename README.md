@@ -1,5 +1,5 @@
 ```Usage: bgp-explain [OPTION...] 
-firstmrt - read and explain the contents of a BGP MRT file
+read and explain the contents of a BGP MRT file received from stdin
 
   -b, --bad                  Only display MRT records containing errors.
   -c, --count                Suppress record output. Count the number of bad,

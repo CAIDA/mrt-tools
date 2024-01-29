@@ -9,7 +9,7 @@
 #include <assert.h>
 #include <argp.h>
 
-const char *argp_program_version = "firstmrt 1.0";
+const char *argp_program_version = "bgp-explain 1.0";
 struct OPTIONS {
   int explain;
   int trace;
@@ -914,7 +914,7 @@ int main (int argc, char **argv) {
   };
   char args_doc[] = "";
   char argp_doc[] = 
-    "firstmrt - read and explain the contents of a BGP MRT file";
+    "read and explain the contents of a BGP MRT file received from stdin";
   struct argp argp_parser = 
     { argp_options, parse_opt, args_doc, argp_doc };
 
