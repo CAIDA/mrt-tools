@@ -1,5 +1,5 @@
 *.o
-src/firstmrt
+src/bgp-explain
 test/misalignment
 test/mrt-header
 *.swp

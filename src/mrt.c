@@ -173,6 +173,20 @@ void mrt_print_trace (
 void mrt_free_record (struct MRT_RECORD *mrt)
 {
   if (!mrt) return;
+  switch (mrt->mrt->type) {
+    case MRT_BGP4MP_ET:
+    case MRT_BGP4MP:
+      switch (mrt->mrt->subtype) {
+        case BGP4MP_MESSAGE:
+        case BGP4MP_MESSAGE_AS4:
+          if (mrt->bgp4mp) mrt_free_bgp4mp_message(mrt->bgp4mp);
+          break;
+        default:
+          break;
+      }
+    default:
+      break;
+  }
   if (mrt->trace_microseconds) free(mrt->trace_microseconds);
   if (mrt->trace_read) free(mrt->trace_read);
   if (mrt->mrt) free(mrt->mrt);
@@ -492,6 +506,7 @@ void mrt_attribute_aggregator4 (
   char error[100];
   struct ipv4_address ip;
 
+  attributes->attribute_aggregator = attribute;
   if (attributes->aggregator_as) {
     snprintf(error, 99, "duplicate AS4_AGGREGATOR attribute");
     error[99]=0;
@@ -564,6 +579,8 @@ void mrt_attribute_aggregator2 (
   struct ipv4_address ip;
   size_t length;
 
+  if (!attributes->attribute_aggregator)
+    attributes->attribute_aggregator = attribute;
   if (attributes->aggregator_as) {
     snprintf(error, 99, "duplicate AGGREGATOR attribute");
     error[99]=0;
@@ -634,6 +651,7 @@ void mrt_attribute_next_hop (
 ) {
   char error[100];
 
+  attributes->attribute_next_hop = attribute;
   if (attributes->next_hop_set) {
     snprintf(error, 99, "duplicate NEXT_HOP attribute");
     error[99]=0;
@@ -729,6 +747,7 @@ void mrt_attribute_origin (
   uint8_t origin;
   char error[100];
 
+  attributes->attribute_origin = attribute;
   if (attribute->after - attribute->content > 0) {
     origin = *(attribute->content);
     if (origin > 2) {
@@ -790,8 +809,12 @@ static const char *mrt_path_attribute_information =
 "[uint8 type][uint8 number of ASes in segment][N x uint32 number of ASes]\n"
 "";
 
-uint8_t mrt_check_as_path_four_bytes(struct BGP_ATTRIBUTE *attribute) {
-/* Check if the attribute contains an AS_PATH using 4-byte AS numbers.
+uint8_t mrt_check_as_path_bytes(
+  struct BGP_ATTRIBUTE *attribute
+, size_t as_bytes
+) {
+/* Check if the attribute contains an AS_PATH using AS numbers of length
+ * as_bytes.
  * If it decodes to exactly the number of bytes in the buffer then yes.
  * Otherwise no.
  */
@@ -803,7 +826,7 @@ uint8_t mrt_check_as_path_four_bytes(struct BGP_ATTRIBUTE *attribute) {
     segment = (struct BGP_AS_PATH_SEGMENT*) p;
     if ((segment->type != BGP_AS_SET) && (segment->type != BGP_AS_SEQUENCE))
       return 0;
-    bytes = 4 * ((size_t) segment->ascount);
+    bytes = as_bytes * ((size_t) segment->ascount);
     p += sizeof(struct BGP_AS_PATH_SEGMENT) + bytes;
   }
   if (p > attribute->after) return 0;
@@ -819,7 +842,7 @@ void mrt_attribute_path (
 ) {
   char error[100];
 
-  if (!fourbyteas) fourbyteas = mrt_check_as_path_four_bytes(attribute);
+  if (!fourbyteas) fourbyteas = mrt_check_as_path_bytes(attribute, 4);
  
   // remove remaining stuff when function is complete 
   // it's just there to make the warnings go away

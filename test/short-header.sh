@@ -2,7 +2,7 @@
 
 # MRT record file contains less than a complete MRT header
 
-../src/firstmrt 2>&1 < short-header.mrt |grep ^ERROR > test.$$
+../src/bgp-explain 2>&1 < short-header.mrt |grep ^ERROR > test.$$
 cmp short-header.output test.$$
 if [ "$?" = "0" ] ;then
   echo "OK properly detected short-header MRT record"

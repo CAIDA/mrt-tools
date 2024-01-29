@@ -1,6 +1,6 @@
 #!/bin/bash
 
-../src/firstmrt 2>&1 < corrupt-nlri.mrt |grep ^ERROR > test.$$
+../src/bgp-explain 2>&1 < corrupt-nlri.mrt |grep ^ERROR > test.$$
 cmp corrupt-nlri.output test.$$
 if [ "$?" = "0" ] ;then
   echo "OK properly detected corrupt NLRI MRT record"

@@ -365,6 +365,11 @@ struct BGP_ATTRIBUTES {
   uint32_t local_pref;
   struct BGP_MP_REACH *mp_reach_nlri;
   struct MRT_TRACEBACK *trace;
+  struct BGP_ATTRIBUTE *attribute_origin;
+  struct BGP_ATTRIBUTE *attribute_next_hop;
+  struct BGP_ATTRIBUTE *attribute_aggregator;
+  struct BGP_ATTRIBUTE *attribute_med;
+  struct BGP_ATTRIBUTE *attribute_local_pref;
   struct BGP_ATTRIBUTE attr[];
 };
 
@@ -429,6 +434,7 @@ struct MRT_RECORD {
   uint8_t *mrt_message; /* after regular or extended header */
   union {
     uint8_t *unrecognized_mrt_message;
+    struct BGP4MP_MESSAGE *bgp4mp;
   };
   int numerrors;
   struct MRT_TRACEBACK **trace_errors;

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-../src/firstmrt 2>&1 < short.mrt |grep ^ERROR > test.$$
+../src/bgp-explain 2>&1 < short.mrt |grep ^ERROR > test.$$
 cmp short.output test.$$
 if [ "$?" = "0" ] ;then
   echo "OK properly detected short MRT record"

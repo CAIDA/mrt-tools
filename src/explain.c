@@ -504,6 +504,18 @@ void print_mp_reach_nlri (
   }
 }
 
+void print_trace_attribute (
+  struct BGP_ATTRIBUTE *a
+, const struct OPTIONS *options
+) {
+  if (!a) return;
+  mrt_print_trace (stdout, a->trace, FALSE);
+  if (options->explain && a->trace->tip)
+    fprintf (stdout, "Information: %s\n\n", a->trace->tip);
+  return;
+}
+
+
 void print_bgp4mp (
   struct MRT_RECORD *record
 , uint64_t bytes_read
@@ -526,8 +538,8 @@ void print_bgp4mp (
   }
   // only print records with errors
   if (!record->numerrors && options->badonly) return; 
-  if (m->header->address_family == BGP4MP_AFI_IPV4) 
-    printf ("%u.%06u(byte %lu): peer AS%u (" PRI_IPV4 ")\n"
+  if (m->header->address_family == BGP4MP_AFI_IPV4) {
+    fprintf (stdout,"%u.%06u(byte %lu): peer AS%u (" PRI_IPV4 ")\n"
       "  withdrawn bytes %u, attribute bytes %u, nlri bytes %lu, IPv4\n",
       (unsigned int) record->seconds, (unsigned int) record->microseconds,
       bytes_read + 1, (unsigned int) m->peeras, PRI_IPV4_V((*(m->peer_ipv4))), 
@@ -535,8 +547,8 @@ void print_bgp4mp (
       (unsigned int) (m->path_attributes_afterbyte - 
         m->path_attributes_firstbyte),
       (m->nlri_afterbyte - m->nlri_firstbyte));
-  else /* BGP4MP_AFI_IPV4 */
-    printf ("%u.%06u(byte %lu): peer AS%u\n"
+  } else { /* BGP4MP_AFI_IPV4 */
+    fprintf (stdout,"%u.%06u(byte %lu): peer AS%u\n"
       "  (" PRI_IPV6 ")\n"
       "  withdrawn bytes %u, attribute bytes %u, nlri bytes %lu, IPv6\n",
       (unsigned int) record->seconds, (unsigned int) record->microseconds,
@@ -545,25 +557,50 @@ void print_bgp4mp (
       (unsigned int) (m->path_attributes_afterbyte - 
         m->path_attributes_firstbyte),
       (m->nlri_afterbyte - m->nlri_firstbyte));
+  }
+  if (options->trace) {
+    fprintf (stdout, "  Peer and local AS:\n");
+    mrt_print_trace (stdout, m->trace_as, FALSE);
+    if (options->explain && m->trace_as->tip)
+      fprintf (stdout, "Information: %s\n\n", m->trace_as->tip);
+    fprintf (stdout, "  Peer and local IP addresses:\n");
+    mrt_print_trace (stdout, m->trace_peerip, FALSE);
+    if (options->explain && m->trace_peerip->tip)
+      fprintf (stdout, "Information: %s\n\n", m->trace_peerip->tip);
+  }
   (void) print_nlri_list("    Prefix: ", m->nlri, bytes_read, options);
   (void) print_nlri_list("    Withdraw: ", m->withdrawals, bytes_read, options);
 
   if (m->attributes) {
-    if (m->attributes->origin != BGP_ORIGIN_UNSET) 
+    if (m->attributes->origin != BGP_ORIGIN_UNSET) {
       printf ("    Origin: %s\n", bgp_origins[m->attributes->origin]);
-    if (m->attributes->next_hop_set) 
+      if (options->trace) print_trace_attribute(
+        m->attributes->attribute_origin, options);
+    }
+    if (m->attributes->next_hop_set) {
       printf ("    IPv4 Next Hop: " PRI_IPV4 "\n",
         PRI_IPV4_V(m->attributes->next_hop));
-    if (m->attributes->local_pref_set) 
+      if (options->trace) print_trace_attribute(
+        m->attributes->attribute_next_hop, options);
+    }
+    if (m->attributes->local_pref_set) {
       printf ("    Local Pref: %u\n", m->attributes->local_pref);
-    if (m->attributes->atomic_aggregate) 
+      if (options->trace) print_trace_attribute(
+        m->attributes->attribute_local_pref, options);
+    }
+    if (m->attributes->atomic_aggregate) {
       printf ("    Atomic Aggregate = TRUE\n");
-    if (m->attributes->aggregator_as) 
+    }
+    if (m->attributes->aggregator_as) {
       printf ("    Aggregator: " PRI_IPV4 " AS%u\n",
         PRI_IPV4_V(m->attributes->aggregator), 
         (unsigned int) m->attributes->aggregator_as);
-    if (m->attributes->mp_reach_nlri)
+      if (options->trace) print_trace_attribute(
+        m->attributes->attribute_aggregator, options);
+    }
+    if (m->attributes->mp_reach_nlri) {
       print_mp_reach_nlri(m->attributes->mp_reach_nlri, bytes_read, options);
+    }
     for (i=0; i < m->attributes->numattributes; i++) {
       a = &(m->attributes->attr[i]);
       print = TRUE;
@@ -593,6 +630,11 @@ void print_bgp4mp (
         printf ("    undecoded attribute %u flags 0x%x length %u\n",
             (unsigned int) a->type, (unsigned int) a->header->flags,
             (unsigned int) (a->after - ((uint8_t*) a->header))); 
+        if (options->trace && !a->fault) {
+          mrt_print_trace (stdout, a->trace, FALSE);
+          if (options->explain && a->trace->tip)
+            fprintf (stdout, "Information: %s\n\n", a->trace->tip);
+        }
       }
       if (a->fault && a->trace) {
         fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
@@ -663,7 +705,8 @@ void mrt_print_decode_message (
         case BGP4MP_MESSAGE_AS4:
           bgp_message = mrt_deserialize_bgp4mp_message(record);
           print_bgp4mp(record, bytes_read, bgp_message, options, stats);
-          mrt_free_bgp4mp_message(bgp_message);
+          record->bgp4mp = bgp_message;
+          // mrt_free_bgp4mp_message(bgp_message);
           break;
         case BGP4MP_STATE_CHANGE:
         case BGP4MP_STATE_CHANGE_AS4:
@@ -678,6 +721,7 @@ void mrt_print_decode_message (
               (int) ntohs(record->mrt->subtype),
               (unsigned int) length);
           stats->num_unknown_records ++;
+          record->unrecognized_mrt_message = record->mrt_message;
       }
       break;
     case MRT_TABLE_DUMP:
