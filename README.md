@@ -1,4 +1,5 @@
-```Usage: bgp-explain [OPTION...] 
+```
+Usage: bgp-explain [OPTION...] 
 read and explain the contents of a BGP MRT file received from stdin
 
   -b, --bad                  Only display MRT records containing errors.
