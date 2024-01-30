@@ -81,6 +81,12 @@ enum bgp_origin_attribute {
 
 extern const char *bgp_origins[4];
 
+enum bgp_as4_or_as2 {
+  BGP_AS_PATH_24UNKNOWN = 0,
+  BGP_AS_PATH_IS_AS2 = 1,
+  BGP_AS_PATH_IS_AS4 = 2
+};
+
 enum bgp_attribute_types {
   BGP_ORIGIN = 1,
   BGP_AS_PATH = 2,
@@ -95,7 +101,7 @@ enum bgp_attribute_types {
   BGP_EXTENDED_COMMUNITIES = 16,
   BGP_AS4_PATH = 17,
   BGP_AS4_AGGREGATOR = 18,
-  BGP_LARGE_COMMUNITY = 32
+  BGP_LARGE_COMMUNITIES = 32
 };
 
 enum bgp4mp_subtypes { /* uint16_t */
@@ -331,12 +337,6 @@ struct BGP_MP_REACH { /* decoded MP_REACH_NLRI attribute */
   struct NLRI_LIST l;
 };
 
-struct BGP_AS_PATH_SEGMENT {
-  uint8_t type;
-  uint8_t ascount;
-  uint32_t as4_list[];
-} __attribute__ ((__packed__));
-
 struct BGP_ATTRIBUTE {
   struct BGP_ATTRIBUTE_HEADER *header;
   uint8_t *content; /* after header, NULL if the header is short */
@@ -350,6 +350,110 @@ struct BGP_ATTRIBUTE {
   };
 };
 
+struct BGP_AS_PATH_SEGMENT {
+  uint8_t type;
+  uint8_t ascount;
+  uint32_t as4_list[];
+} __attribute__ ((__packed__));
+
+struct BGP_AS_PATH {
+  uint32_t numsegments;
+  uint8_t fault;
+  struct MRT_TRACEBACK *trace;
+  struct BGP_ATTRIBUTE *attr;
+  struct BGP_AS_PATH_SEGMENT *path[];
+};
+
+struct BGP_COMMUNITIES {
+  uint32_t num;
+  uint8_t fault;
+  struct BGP_ATTRIBUTE *attr;
+  uint32_t c[];
+};
+
+struct BGP_LARGE_COMMMUNITY {
+  uint32_t global;
+  uint32_t local1;
+  uint32_t local2;
+} __attribute__ ((__packed__));
+
+struct BGP_LARGE_COMMUNITIES {
+  uint32_t num;
+  uint8_t fault;
+  struct BGP_ATTRIBUTE *attr;
+  struct BGP_LARGE_COMMMUNITY c[];
+};
+
+struct BGP_EXTENDED_COMMUNITY_TYPE_BITS {
+  uint8_t type: 6;
+  uint8_t transitive: 1;
+  uint8_t authority: 1;
+} __attribute__ ((__packed__));
+
+struct BGP_EXTENDED_COMMUNITY_TYPE {
+  union {
+    uint8_t type;
+    struct BGP_EXTENDED_COMMUNITY_TYPE_BITS bits;
+  };
+} __attribute__ ((__packed__));
+
+
+struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_OPAQUE {
+  union {
+    uint8_t high;
+    struct BGP_EXTENDED_COMMUNITY_TYPE_BITS bits;
+  };
+  uint8_t low;
+  uint64_t value: 48;
+} __attribute__ ((__packed__));
+
+struct BGP_EXTENDED_COMMUNITY_ONE_OCTET_OPAQUE {
+  union {
+    uint8_t type;
+    struct BGP_EXTENDED_COMMUNITY_TYPE_BITS bits;
+  };
+  uint64_t value: 56;
+} __attribute__ ((__packed__));
+
+struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_AS_SPECIFIC {
+  union {
+    uint8_t high;
+    struct BGP_EXTENDED_COMMUNITY_TYPE_BITS bits;
+  };
+  uint8_t subtype;
+  uint16_t global;
+  uint32_t local;
+} __attribute__ ((__packed__));
+
+struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_IP {
+  union {
+    uint8_t high;
+    struct BGP_EXTENDED_COMMUNITY_TYPE_BITS bits;
+  };
+  uint8_t subtype;
+  struct ipv4_address global;
+  uint16_t local;
+} __attribute__ ((__packed__));
+
+struct BGP_EXTENDED_COMMUNITY {
+  union {
+    struct BGP_EXTENDED_COMMUNITY_TYPE type;
+    struct BGP_EXTENDED_COMMUNITY_ONE_OCTET_OPAQUE one;
+    struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_OPAQUE opaque;
+    struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_AS_SPECIFIC as;
+    struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_IP ip;
+  };
+} __attribute__ ((__packed__));
+
+struct BGP_EXTENDED_COMMUNITIES {
+  uint32_t num;
+  uint8_t fault;
+  struct BGP_ATTRIBUTE *attr;
+  struct BGP_EXTENDED_COMMUNITY c[];
+};
+
+
+
 struct BGP_ATTRIBUTES {
   int numattributes;
   uint8_t fault: 1;
@@ -358,18 +462,25 @@ struct BGP_ATTRIBUTES {
   uint8_t next_hop_set: 1;
   uint8_t med_set: 1;
   uint8_t local_pref_set: 1;
+  uint8_t as2or4: 2; // AS_PATH is 2 or 4 bytes
   struct ipv4_address next_hop;
   struct ipv4_address aggregator;
   uint32_t aggregator_as;
   uint32_t med;
   uint32_t local_pref;
   struct BGP_MP_REACH *mp_reach_nlri;
+  struct BGP_AS_PATH *path;
+  struct BGP_COMMUNITIES *communities;
+  struct BGP_LARGE_COMMUNITIES *large_communities;
+  struct BGP_EXTENDED_COMMUNITIES *extended_communities;
   struct MRT_TRACEBACK *trace;
   struct BGP_ATTRIBUTE *attribute_origin;
   struct BGP_ATTRIBUTE *attribute_next_hop;
   struct BGP_ATTRIBUTE *attribute_aggregator;
   struct BGP_ATTRIBUTE *attribute_med;
   struct BGP_ATTRIBUTE *attribute_local_pref;
+  struct BGP_ATTRIBUTE *attribute_as_path;
+  struct BGP_ATTRIBUTE *attribute_as4_path;
   struct BGP_ATTRIBUTE attr[];
 };
 
@@ -490,6 +601,15 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
 , uint16_t address_family
 );
 
+char *mrt_aspath_to_string (struct BGP_AS_PATH *path);
+char *mrt_communities_to_string (struct BGP_COMMUNITIES *communities);
+char *mrt_large_communities_to_string (
+  struct BGP_LARGE_COMMUNITIES *communities
+);
+char *mrt_extended_communities_to_string (
+  struct BGP_EXTENDED_COMMUNITIES *communities
+);
+
 struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
 /* record->mrt->type == MRT_BGP4MP or MRT_BGP4MP_ET
  * record->mrt->subtype == BGP4MP_MESSAGE or BGP4MP_MESSAGE_AS4
@@ -499,6 +619,7 @@ struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
 );
 
 void mrt_free_bgp4mp_message (struct BGP4MP_MESSAGE *m);
+
 
 
 #pragma GCC diagnostic ignored "-Waddress-of-packed-member"

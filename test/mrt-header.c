@@ -15,12 +15,21 @@ void mrt_sanity_check_test(void) {
   uint8_t bytes[16] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 255, 0, 0, 0, 0 };
   uint8_t a;
   char buffer[20];
+  struct BGP_EXTENDED_COMMUNITY ec;
 
   assert (((void*) tr->bgp_message6 - (void*) tr) == 36);
   assert (((void*) tr->bgp_message4 - (void*) tr) == 12);
   assert(sizeof(struct ipv4_address) == 4);
   assert(sizeof(struct ipv6_address) == 16);
   assert(sizeof(struct BGP_ATTRIBUTE_HEADER) == 4);
+
+  assert(sizeof(struct BGP_EXTENDED_COMMUNITY) == 8);
+  ec.opaque.high = 0x44;
+  ec.one.value = 0x01234567890ABC;
+  assert (ec.type.type == 0x44);
+  assert (ec.type.bits.authority == 0);
+  assert (ec.type.bits.transitive == 1);
+  
 
   /* make sure my netmask applier is doing the right thing.
    * The IPv6 address in bytes[] should be okay for a /96 but not for a /95

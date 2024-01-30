@@ -275,6 +275,23 @@ void printhex(char *prefix, void *ptr, int words) {
   return;
 }
 
+void print_information (FILE *f, int print, const char *information) {
+  if (!print) return;
+  fprintf (f, "Information: %s\n\n",(information==NULL)?"NULL":information);
+  return;
+}
+
+void print_trace_information (
+  FILE *f
+, struct MRT_TRACEBACK *trace
+, int printinfo
+, const char *information
+) {
+  mrt_print_trace (f, trace, FALSE);
+  print_information (f, printinfo, information);
+  return;
+}
+
 int print_nlri_list (
   char *saybefore
 , struct NLRI_LIST *list
@@ -298,22 +315,19 @@ int print_nlri_list (
     if (prefix->fault_flag && prefix->trace) {
       fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
         prefix->trace->error, (long unsigned int) bytes_read + 1);
-      mrt_print_trace (stdout, prefix->trace, FALSE);
-      if (prefix->trace->tip && !options->quiet)  
-        fprintf (stdout, "Information: %s\n\n", prefix->trace->tip);
+      print_trace_information (stdout, prefix->trace,
+        prefix->trace->tip && !options->quiet, prefix->trace->tip);
       error=TRUE;
     } else if (prefix->trace && options->trace) {
-      mrt_print_trace (stdout, prefix->trace, FALSE);
-      if (options->explain && prefix->trace->tip)
-        fprintf (stdout, "Information: %s\n\n", prefix->trace->tip);
+      print_trace_information (stdout, prefix->trace,
+        options->explain && prefix->trace->tip, prefix->trace->tip);
     }
   }
   if (list->error) {
     fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
       list->error->error, (long unsigned int) bytes_read + 1);
-    mrt_print_trace (stdout, list->error, FALSE);
-    if (list->error->tip && !options->quiet) 
-      fprintf (stdout, "Information: %s\n\n", list->error->tip);
+    print_trace_information (stdout, list->error,
+      list->error->tip && !options->quiet, list->error->tip);
     error=TRUE;
   }
   return error;
@@ -498,9 +512,8 @@ void print_mp_reach_nlri (
   if (reach->attribute->fault && (reach->attribute->trace)) {
     fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
       reach->attribute->trace->error, (long unsigned int) bytes_read + 1);
-    mrt_print_trace (stdout, reach->attribute->trace, FALSE);
-    if (reach->attribute->trace->tip) 
-      fprintf (stdout, "Information: %s\n\n", reach->attribute->trace->tip);
+    print_trace_information (stdout, reach->attribute->trace,
+      reach->attribute->trace->tip!=NULL, reach->attribute->trace->tip);
   }
 }
 
@@ -509,12 +522,10 @@ void print_trace_attribute (
 , const struct OPTIONS *options
 ) {
   if (!a) return;
-  mrt_print_trace (stdout, a->trace, FALSE);
-  if (options->explain && a->trace->tip)
-    fprintf (stdout, "Information: %s\n\n", a->trace->tip);
+  print_trace_information (stdout, a->trace,
+    options->explain && a->trace->tip, a->trace->tip);
   return;
 }
-
 
 void print_bgp4mp (
   struct MRT_RECORD *record
@@ -526,14 +537,14 @@ void print_bgp4mp (
   struct BGP_ATTRIBUTE *a;
   int i;
   uint8_t print = TRUE;
+  char *s;
 
   if (options->count) return; // only print final count
   if (m->error) {
     fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
       m->error->error, (long unsigned int) bytes_read + 1);
-    mrt_print_trace (stdout, m->error, FALSE);
-    if (m->error->tip && !options->quiet) 
-      fprintf (stdout, "Information: %s\n\n", m->error->tip);
+    print_trace_information (stdout, m->error, 
+      m->error->tip && !options->quiet, m->error->tip);
     return;
   }
   // only print records with errors
@@ -560,13 +571,11 @@ void print_bgp4mp (
   }
   if (options->trace) {
     fprintf (stdout, "  Peer and local AS:\n");
-    mrt_print_trace (stdout, m->trace_as, FALSE);
-    if (options->explain && m->trace_as->tip)
-      fprintf (stdout, "Information: %s\n\n", m->trace_as->tip);
+    print_trace_information (stdout, m->trace_as,
+      options->explain && m->trace_as->tip, m->trace_as->tip);
     fprintf (stdout, "  Peer and local IP addresses:\n");
-    mrt_print_trace (stdout, m->trace_peerip, FALSE);
-    if (options->explain && m->trace_peerip->tip)
-      fprintf (stdout, "Information: %s\n\n", m->trace_peerip->tip);
+    print_trace_information (stdout, m->trace_peerip,
+      options->explain && m->trace_peerip->tip, m->trace_peerip->tip);
   }
   (void) print_nlri_list("    Prefix: ", m->nlri, bytes_read, options);
   (void) print_nlri_list("    Withdraw: ", m->withdrawals, bytes_read, options);
@@ -588,6 +597,12 @@ void print_bgp4mp (
       if (options->trace) print_trace_attribute(
         m->attributes->attribute_local_pref, options);
     }
+    if (m->attributes->med_set) {
+      printf ("    Multiexit Discriminator (MED): %u\n", 
+        m->attributes->med);
+      if (options->trace) print_trace_attribute(
+        m->attributes->attribute_med, options);
+    }
     if (m->attributes->atomic_aggregate) {
       printf ("    Atomic Aggregate = TRUE\n");
     }
@@ -597,6 +612,27 @@ void print_bgp4mp (
         (unsigned int) m->attributes->aggregator_as);
       if (options->trace) print_trace_attribute(
         m->attributes->attribute_aggregator, options);
+    }
+    if (m->attributes->path) {
+      s = mrt_aspath_to_string(m->attributes->path);
+      printf ("    AS Path: %s\n", s);
+      free(s);
+      if (options->trace) print_trace_attribute(
+        m->attributes->path->attr, options);
+    }
+    if (m->attributes->communities) {
+      s = mrt_communities_to_string(m->attributes->communities);
+      printf ("    Communities: %s\n", s);
+      free(s);
+      if (options->trace) print_trace_attribute(
+        m->attributes->communities->attr, options);
+    }
+    if (m->attributes->large_communities) {
+      s = mrt_large_communities_to_string(m->attributes->large_communities);
+      printf ("    Large Communities: %s\n", s);
+      free(s);
+      if (options->trace) print_trace_attribute(
+        m->attributes->large_communities->attr, options);
     }
     if (m->attributes->mp_reach_nlri) {
       print_mp_reach_nlri(m->attributes->mp_reach_nlri, bytes_read, options);
@@ -624,6 +660,20 @@ void print_bgp4mp (
         case BGP_MP_REACH_NLRI:
           if (m->attributes->mp_reach_nlri) print = FALSE;
           break;
+        case BGP_AS_PATH:
+        case BGP_AS4_PATH:
+          if (m->attributes->path && m->attributes->path->numsegments)
+            print = FALSE;
+          break;
+        case BGP_COMMUNITIES:
+          if (m->attributes->communities) print = FALSE;
+          break;
+        case BGP_LARGE_COMMUNITIES:
+          if (m->attributes->large_communities) print = FALSE;
+          break;
+        case BGP_MED:
+          if (m->attributes->med_set) print = FALSE;
+          break;
         default:
       };
       if (print) {
@@ -631,25 +681,22 @@ void print_bgp4mp (
             (unsigned int) a->type, (unsigned int) a->header->flags,
             (unsigned int) (a->after - ((uint8_t*) a->header))); 
         if (options->trace && !a->fault) {
-          mrt_print_trace (stdout, a->trace, FALSE);
-          if (options->explain && a->trace->tip)
-            fprintf (stdout, "Information: %s\n\n", a->trace->tip);
+          print_trace_information (stdout, a->trace,
+            options->explain && a->trace->tip, a->trace->tip);
         }
       }
       if (a->fault && a->trace) {
         fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
           a->trace->error, (long unsigned int) bytes_read + 1);
-        mrt_print_trace (stdout, a->trace, FALSE);
-        if (a->trace->tip && !options->quiet) 
-          fprintf (stdout, "Information: %s\n\n", a->trace->tip);
+        print_trace_information (stdout, a->trace,
+          a->trace->tip && !options->quiet, a->trace->tip);
       }  
     } 
     if (m->attributes->fault && m->attributes->trace) {
       fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
         m->attributes->trace->error, (long unsigned int) bytes_read + 1);
-      mrt_print_trace (stdout, m->attributes->trace, FALSE);
-      if (m->attributes->trace->tip && !options->quiet) 
-        fprintf (stdout, "Information: %s\n\n", m->attributes->trace->tip);
+      print_trace_information (stdout, m->attributes->trace,
+        !options->quiet, m->attributes->trace->tip);
     }
   }
   return;
@@ -899,17 +946,19 @@ int main (int argc, char **argv) {
   };
   struct argp_option argp_options[] = {
     {"explain",  'e', 0,      0,  
-      "Verbosely explain the contents of each MRT record." },
+      "Trace decoded MRT record to the bytes in the file."
+      " Include the expected byte format and a reference to the RFC or other"
+      " relevant documentation." },
     {"trace",    't', 0,      0,  
       "Trace decoded MRT record to the bytes in the file." },
     {"quiet",    'q', 0,      0,  
-      "Trace but do not verbosely explain errors in MRT records." },
+      "Trace but do not explain errors in MRT records." },
     {"bad",      'b', 0,      0,  
       "Only display MRT records containing errors." },
     {"count",    'c', 0,      0,  
       "Suppress record output. Count the number of bad, correct and total "
       "MRT entries. Return non-zero if the file contains at least one bad "
-      "MR entry." },
+      "MRT entry." },
     { 0 }
   };
   char args_doc[] = "";

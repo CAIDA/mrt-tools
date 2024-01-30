@@ -1,3 +1,3 @@
-ERROR: nlri IPv4 prefix 23.104.0.0/12 wrong. 23.96.0.0 is correct for /12
-ERROR: nlri prefix length 113 requires 15 bytes but only has 1
-ERROR: nlri buffer of 8 bytes did not align with the encoded prefixes
+ERROR: NLRI IPv4 prefix 23.104.0.0/12 is wrong. Would be 23.96.0.0/12
+ERROR: NLRI prefix length 113 requires 15 bytes but only has 1
+ERROR: NLRI buffer of 8 bytes did not align with the encoded prefixes

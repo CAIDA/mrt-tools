@@ -61,11 +61,11 @@ void print_trace_line (
     if (len>16) len = 16;
   } else len = 0;
   if (len>0) memcpy (buffer, start, len);
-  snprintf(printbuffer, 79, 
+  snprintf(printbuffer, 79,
     "  %8lx: %04x %04x %04x %04x %04x %04x %04x %04x\n",
-    position, ntohs(buffer[0]), ntohs(buffer[1]), ntohs(buffer[2]), 
-    ntohs(buffer[3]), ntohs(buffer[4]), ntohs(buffer[5]), ntohs(buffer[6]), 
-    ntohs(buffer[7])); 
+    position, ntohs(buffer[0]), ntohs(buffer[1]), ntohs(buffer[2]),
+    ntohs(buffer[3]), ntohs(buffer[4]), ntohs(buffer[5]), ntohs(buffer[6]),
+    ntohs(buffer[7]));
   if (len<16) {
     printbuffer[mtr_print_line_positions[len]] = '\n';
     printbuffer[mtr_print_line_positions[len]+1] = 0;
@@ -76,13 +76,13 @@ void print_trace_line (
   if (highlights && memcmp(highlights,"                ",16)) {
     fprintf(output, "            %c%c%c%c %c%c%c%c %c%c%c%c %c%c%c%c "
                                 "%c%c%c%c %c%c%c%c %c%c%c%c %c%c%c%c\n",
-      highlights[0], highlights[0], highlights[1], highlights[1], 
-      highlights[2], highlights[2], highlights[3], highlights[3], 
-      highlights[4], highlights[4], highlights[5], highlights[5], 
-      highlights[6], highlights[6], highlights[7], highlights[7], 
-      highlights[8], highlights[8], highlights[9], highlights[9], 
-      highlights[10], highlights[10], highlights[11], highlights[11], 
-      highlights[12], highlights[12], highlights[13], highlights[13], 
+      highlights[0], highlights[0], highlights[1], highlights[1],
+      highlights[2], highlights[2], highlights[3], highlights[3],
+      highlights[4], highlights[4], highlights[5], highlights[5],
+      highlights[6], highlights[6], highlights[7], highlights[7],
+      highlights[8], highlights[8], highlights[9], highlights[9],
+      highlights[10], highlights[10], highlights[11], highlights[11],
+      highlights[12], highlights[12], highlights[13], highlights[13],
       highlights[14], highlights[14], highlights[15], highlights[15]);
   }
   return;
@@ -111,9 +111,9 @@ void mrt_print_trace (
   first -= offset;
   /* print at least 4 bytes before the highlighted byte unless that's
    * before the start of the mrt record */
-  if ((first > (uint8_t*) trace->mrt) && 
+  if ((first > (uint8_t*) trace->mrt) &&
       ((trace->firstbyte - first) < 4) ) {
-    first -= 16; 
+    first -= 16;
   }
   /* if told to print the whole record, then ignore all that and print the
    * whole record */
@@ -147,7 +147,7 @@ void mrt_print_trace (
 
   /* print at least 4 bytes following the flagged data unless that
    * would extend past the end of the mrt record */
-  if ((trace->afterbyte + 4 < last) && 
+  if ((trace->afterbyte + 4 < last) &&
       ((trace->afterbyte + 4) < trace->aftermrt) ) {
     last += 16;
   }
@@ -163,7 +163,7 @@ void mrt_print_trace (
         highlights[i] = '!';
       /* else keep ' ' */
     }
-    print_trace_line(output, (size_t) (first - ((uint8_t*) trace->mrt)), 
+    print_trace_line(output, (size_t) (first - ((uint8_t*) trace->mrt)),
       first, trace->aftermrt, highlights);
     first += 16;
   }
@@ -197,7 +197,7 @@ void mrt_free_record (struct MRT_RECORD *mrt)
   return;
 }
 
-static void push_error(struct MRT_RECORD *mrt, struct MRT_TRACEBACK *tr) 
+static void push_error(struct MRT_RECORD *mrt, struct MRT_TRACEBACK *tr)
 {
   if (mrt->numerrors) {
     mrt->trace_errors = (struct MRT_TRACEBACK **) realloc(
@@ -279,10 +279,10 @@ int mrt_count_attributes (
   for (num=0; p < after; num++) {
     if ((after - p) < (sizeof(struct BGP_ATTRIBUTE_HEADER)-1)) return num+1;
     attribute = (struct BGP_ATTRIBUTE_HEADER*) p;
-    if ( (attribute->extended_length) && 
+    if ( (attribute->extended_length) &&
          ((after - p) < sizeof(struct BGP_ATTRIBUTE_HEADER)) )
       return num+1;
-    if (attribute->extended_length) 
+    if (attribute->extended_length)
       p += sizeof(struct BGP_ATTRIBUTE_HEADER) + ntohs(attribute->length16);
     else
       p += sizeof(struct BGP_ATTRIBUTE_HEADER) - 1 + attribute->length8;
@@ -290,39 +290,14 @@ int mrt_count_attributes (
   return num;
 }
 
-void mrt_free_attributes(struct BGP_ATTRIBUTES *attributes)
-{
-  int i;
-  if (!attributes) return;
-  for (i=0; i < attributes->numattributes; i++) {
-    if (attributes->attr[i].trace)
-      free(attributes->attr[i].trace);
-    switch (attributes->attr[i].type) {
-      /* type-specific free operations */
-      case BGP_MP_REACH_NLRI:
-        break; /* freed below with mrt_free_nlri() */
-      default: /* simple free */
-        if (attributes->attr[i].unknown)
-          free(attributes->attr[i].unknown);
-    };
-  }
-  if (attributes->mp_reach_nlri) {
-    mrt_free_nlri(&(attributes->mp_reach_nlri->l), TRUE);
-    free(attributes->mp_reach_nlri);
-  }
-  if (attributes->trace) free(attributes->trace);
-  free(attributes);
-  return;
-}
-
-static const char *mrt_attribute_information = 
+static const char *mrt_attribute_information =
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
 "Path Attributes section\n"
 "[uint8 flags][uint8 type][uint8 or uint16 length (extended length flag)]\n"
 "[0 or more bytes attribute data]";
 
 
-static const char *mrt_atomic_aggregate_information = 
+static const char *mrt_atomic_aggregate_information =
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
 "Path Attributes section, part (f) ATOMIC_AGGREGATE\n"
 "No data. Simple flag: attribute exists or it does not.";
@@ -336,7 +311,7 @@ void mrt_attribute_atomic_aggregate (
   if (attributes->atomic_aggregate) {
     snprintf(error, 99, "duplicate ATOMIC_AGGREGATE attribute");
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_attribute_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -346,11 +321,11 @@ void mrt_attribute_atomic_aggregate (
     return;
   }
   if (attribute->after - attribute->content > 0) {
-    snprintf(error, 99, 
+    snprintf(error, 99,
         "invalid ATOMIC AGGREGATE attribute length expecting 0 got %u bytes",
         (unsigned int) (attribute->after - attribute->content));
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_atomic_aggregate_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -363,7 +338,7 @@ void mrt_attribute_atomic_aggregate (
   return;
 }
 
-static const char *mrt_mp_reach_information = 
+static const char *mrt_mp_reach_information =
 "https://datatracker.ietf.org/doc/html/rfc4760#section-3\n"
 "[uint16 address family][uint8 SAFI (unicast/multicast)]\n"
 "[uint8 byte length of next hop addresses][next hop addresses]\n"
@@ -388,7 +363,7 @@ void mrt_attribute_mp_reach_nlri (
   if (attributes->mp_reach_nlri) {
     snprintf(error, 99, "duplicate MP_REACH_NLRI attribute");
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_attribute_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -405,12 +380,12 @@ void mrt_attribute_mp_reach_nlri (
     if ((attribute->after - attribute->content) < minsize) badflag=TRUE;
   }
   if (badflag) {
-    snprintf(error, 99, 
+    snprintf(error, 99,
         "short MP_REACH_NRLI attribute %u bytes of minimum %u",
         (unsigned int) (attribute->after - attribute->content),
         (unsigned int) minsize);
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_mp_reach_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -432,7 +407,7 @@ void mrt_attribute_mp_reach_nlri (
       snprintf(error, 99, "MP_REACH_NLRI address family %x unknown",
         ntohl(h->address_family));
       error[99]=0;
-      attribute->trace = 
+      attribute->trace =
         newtraceback(record, error, mrt_attribute_information);
       attribute->trace->firstbyte = (uint8_t*) attribute->header;
       attribute->trace->afterbyte = attribute->after;
@@ -442,12 +417,12 @@ void mrt_attribute_mp_reach_nlri (
       return;
   };
   if (badflag) { /* wrong next hop length */
-    snprintf(error, 99, 
+    snprintf(error, 99,
         "MP_REACH_NRLI next hop length expecting %s bytes got %u",
         (h->address_family == BGP4MP_AFI_IPV6)?"16 or 32":"4",
         (unsigned int) (attribute->after - attribute->content));
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_mp_reach_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -460,13 +435,13 @@ void mrt_attribute_mp_reach_nlri (
    * with the decoded and traced NRLI information */
   reach = (struct BGP_MP_REACH*) mrt_nlri_deserialize (record,
     attribute->content + minsize, attribute->after,
-    &(attribute->header->length16), h->address_family, TRUE, 
+    &(attribute->header->length16), h->address_family, TRUE,
     ((uint8_t*) &(reach->l)) - ((uint8_t*) reach));
   if (reach->l.faults) {
     snprintf(error, 99, "MP_REACH_NRLI decode fault: %s",
         (reach->l.error)?reach->l.error->error:"");
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_mp_reach_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -494,7 +469,7 @@ void mrt_attribute_mp_reach_nlri (
   return ;
 }
 
-static const char *mrt_aggregator4_information = 
+static const char *mrt_aggregator4_information =
 "https://datatracker.ietf.org/doc/html/rfc6793#section-3\n"
 "[uint32 AS Number][uint32 IP Address]";
 
@@ -506,11 +481,10 @@ void mrt_attribute_aggregator4 (
   char error[100];
   struct ipv4_address ip;
 
-  attributes->attribute_aggregator = attribute;
-  if (attributes->aggregator_as) {
+  if (attributes->aggregator_as && (attributes->aggregator_as > 65565)) {
     snprintf(error, 99, "duplicate AS4_AGGREGATOR attribute");
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_attribute_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -520,11 +494,11 @@ void mrt_attribute_aggregator4 (
     return;
   }
   if (attribute->after - attribute->content != 8) {
-    snprintf(error, 99, 
+    snprintf(error, 99,
         "invalid AS4_AGGREGATOR attribute length expecting 8 bytes got %u",
         (unsigned int) (attribute->after - attribute->content));
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_aggregator4_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -540,12 +514,12 @@ void mrt_attribute_aggregator4 (
   ip = *((struct ipv4_address*) (attribute->content + 4));
   if ( (attributes->aggregator.whole != 0) &&
        (attributes->aggregator.whole != ip.whole)) {
-    snprintf(error, 99, 
+    snprintf(error, 99,
         "AS4_AGGREGATOR and AGGREGATOR IP address mismatch: " PRI_IPV4
         " != " PRI_IPV4,
         PRI_IPV4_V(ip), PRI_IPV4_V((attributes->aggregator)));
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_aggregator4_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -555,12 +529,14 @@ void mrt_attribute_aggregator4 (
     return ;
   }
 
+  attributes->as2or4 = BGP_AS_PATH_IS_AS2;
+  attributes->attribute_aggregator = attribute;
   attributes->aggregator_as = ntohl(*((uint32_t*) attribute->content));
   attributes->aggregator = ip;
   return ;
 }
 
-static const char *mrt_aggregator2_information = 
+static const char *mrt_aggregator2_information =
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
 "Path Attributes section\n"
 "[uint8 flags][uint8 type][uint8 or uint16 length (extended length flag)]\n"
@@ -578,28 +554,15 @@ void mrt_attribute_aggregator2 (
   char error[100];
   struct ipv4_address ip;
   size_t length;
+  uint32_t aggregator_as;
 
-  if (!attributes->attribute_aggregator)
-    attributes->attribute_aggregator = attribute;
-  if (attributes->aggregator_as) {
-    snprintf(error, 99, "duplicate AGGREGATOR attribute");
-    error[99]=0;
-    attribute->trace = 
-      newtraceback(record, error, mrt_attribute_information);
-    attribute->trace->firstbyte = (uint8_t*) attribute->header;
-    attribute->trace->afterbyte = attribute->after;
-    attribute->trace->error_firstbyte = &(attribute->header->type);
-    attribute->trace->error_afterbyte = attribute->trace->error_firstbyte + 1;
-    attribute->fault = TRUE;
-    return;
-  }
   length = attribute->after - attribute->content;
   if ((length != 6) && (length != 8)) {
-    snprintf(error, 99, 
+    snprintf(error, 99,
         "invalid AGGREGATOR attribute length expecting 6 or 8 bytes got %u",
         (unsigned int) (attribute->after - attribute->content));
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_aggregator2_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -613,16 +576,16 @@ void mrt_attribute_aggregator2 (
     return ;
   }
   ip = *((struct ipv4_address*) (attribute->content + 2));
-  if (length == 8) 
+  if (length == 8)
     ip = *((struct ipv4_address*) (attribute->content + 4));
   if ( (attributes->aggregator.whole != 0) &&
        (attributes->aggregator.whole != ip.whole)) {
-    snprintf(error, 99, 
+    snprintf(error, 99,
         "AGGREGATOR and AS4_AGGREGATOR IP address mismatch: " PRI_IPV4
         " != " PRI_IPV4,
         PRI_IPV4_V(ip), PRI_IPV4_V((attributes->aggregator)));
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_aggregator2_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -632,14 +595,57 @@ void mrt_attribute_aggregator2 (
     return ;
   }
 
-  if (length == 6) attributes->aggregator_as = 
+  if (length == 6) aggregator_as =
     (uint32_t) ntohs(*((uint16_t*) attribute->content));
-  else attributes->aggregator_as = ntohl(*((uint32_t*) attribute->content));
+  else aggregator_as = ntohl(*((uint32_t*) attribute->content));
+
+  /* if it's a 4-byte aggregator_as and we already have an aggregator AS then
+   * this is an invalid duplicate */
+  if (attributes->aggregator_as && (length != 6)) {
+    snprintf(error, 99, "duplicate AGGREGATOR attribute");
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->after;
+    attribute->trace->error_firstbyte = &(attribute->header->type);
+    attribute->trace->error_afterbyte = attribute->trace->error_firstbyte + 1;
+    attribute->fault = TRUE;
+    return;
+  }
+  /* if it's a 2-byte aggregator AS and we already have a 2-byte aggregator
+   * AS and it's not the same as this one then something is wrong. */
+  if (attributes->aggregator_as && (attributes->aggregator_as < 65536) &&
+      (attributes->aggregator_as != aggregator_as)) {
+    snprintf(error, 99, "mismatch between AGGREGATOR (%u) and AGGREGATOR4 (%u)"
+      " AS numbers", aggregator_as, attributes->aggregator_as);
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->after;
+    attribute->trace->error_firstbyte = &(attribute->header->type);
+    attribute->trace->error_afterbyte = attribute->trace->error_firstbyte + 1;
+    attribute->fault = TRUE;
+    return;
+  }
+  /* Note: not detecting errors where we don't use the proper 2-byte AS
+   * to mean an AGGREGATOR4 attribute is present */
+  /* If it's a 2-byte aggregator AS and we already have an aggregator AS
+   * from an AGGREGATOR4 attribute, keep it */
+  if (attributes->aggregator_as) {
+    return;
+  }
+
+  /* Otherwise, use this aggregator attribute */
+  if (length==8) attributes->as2or4 = BGP_AS_PATH_IS_AS4;
+  attributes->attribute_aggregator = attribute;
+  attributes->aggregator_as = aggregator_as;
   attributes->aggregator = ip;
   return ;
 }
 
-static const char *mrt_next_hop_information = 
+static const char *mrt_next_hop_information =
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
 "Path Attributes section, part (c) NEXT_HOP\n"
 "[uint32 IP Address]";
@@ -655,7 +661,7 @@ void mrt_attribute_next_hop (
   if (attributes->next_hop_set) {
     snprintf(error, 99, "duplicate NEXT_HOP attribute");
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_attribute_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -665,11 +671,11 @@ void mrt_attribute_next_hop (
     return;
   }
   if (attribute->after - attribute->content != 4) {
-    snprintf(error, 99, 
+    snprintf(error, 99,
         "invalid NEXT_HOP attribute length expecting 4 bytes got %u",
         (unsigned int) (attribute->after - attribute->content));
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_next_hop_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -687,7 +693,7 @@ void mrt_attribute_next_hop (
   return ;
 }
 
-static const char *mrt_local_pref_information = 
+static const char *mrt_local_pref_information =
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
 "Path Attributes section, part (e) LOCAL_PREF\n"
 "[uint32 local pref] larger = more preferred";
@@ -702,7 +708,7 @@ void mrt_attribute_local_pref (
   if (attributes->local_pref_set) {
     snprintf(error, 99, "duplicate LOCAL_PREF attribute");
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_attribute_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -712,11 +718,11 @@ void mrt_attribute_local_pref (
     return;
   }
   if (attribute->after - attribute->content != 4) {
-    snprintf(error, 99, 
+    snprintf(error, 99,
         "invalid LOCAL_PREF attribute length expecting 4 bytes got %u",
         (unsigned int) (attribute->after - attribute->content));
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_local_pref_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->after;
@@ -734,7 +740,7 @@ void mrt_attribute_local_pref (
   return ;
 }
 
-static const char *mrt_origin_attribute_information = 
+static const char *mrt_origin_attribute_information =
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
 "Path Attributes section, part (a) ORIGIN\n"
 "[uint8 origin] 0=IGP, 1=EGP, 2=INCOMPLETE";
@@ -751,13 +757,13 @@ void mrt_attribute_origin (
   if (attribute->after - attribute->content > 0) {
     origin = *(attribute->content);
     if (origin > 2) {
-      snprintf(error, 99, 
+      snprintf(error, 99,
         "invalid BGP ORIGIN %u in attribute of %svalid size %u",
         (unsigned int) origin,
         (attribute->after - attribute->content == 1)?"":"IN",
         (unsigned int) (attribute->after - attribute->content));
       error[99]=0;
-      attribute->trace = 
+      attribute->trace =
         newtraceback(record, error, mrt_origin_attribute_information);
       attribute->trace->firstbyte = (uint8_t*) attribute->header;
       attribute->trace->afterbyte = attribute->trace->firstbyte + 1;
@@ -767,10 +773,10 @@ void mrt_attribute_origin (
       return ;
     }
     if (attributes->origin != BGP_ORIGIN_UNSET) {
-      snprintf(error, 99, 
+      snprintf(error, 99,
         "duplicate BGP ORIGIN %u", (unsigned int) origin);
       error[99]=0;
-      attribute->trace = 
+      attribute->trace =
         newtraceback(record, error, mrt_origin_attribute_information);
       attribute->trace->firstbyte = (uint8_t*) attribute->header;
       attribute->trace->afterbyte = attribute->after;
@@ -782,11 +788,11 @@ void mrt_attribute_origin (
     attributes->origin = origin;
   }
   if (attribute->after - attribute->content != 1) {
-    snprintf(error, 99, 
+    snprintf(error, 99,
         "invalid BGP ORIGIN attribute length expecting 1 byte got %u",
         (unsigned int) (attribute->after - attribute->content));
     error[99]=0;
-    attribute->trace = 
+    attribute->trace =
       newtraceback(record, error, mrt_origin_attribute_information);
     attribute->trace->firstbyte = (uint8_t*) attribute->header;
     attribute->trace->afterbyte = attribute->trace->firstbyte + 1;
@@ -798,7 +804,54 @@ void mrt_attribute_origin (
   return;
 }
 
-static const char *mrt_path_attribute_information = 
+static const char *mrt_med_attribute_information =
+"https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
+"Path Attributes section, part (d) MULTI_EXIT_DISC\n"
+"[uint32 med]";
+
+void mrt_attribute_med (
+  struct MRT_RECORD *record
+, struct BGP_ATTRIBUTES *attributes
+, struct BGP_ATTRIBUTE *attribute
+) {
+  char error[100];
+  uint32_t *p;
+
+  if (attribute->after - attribute->content != 4) {
+    snprintf(error, 99,
+        "invalid BGP MED attribute length expecting 4 bytes got %u",
+        (unsigned int) (attribute->after - attribute->content));
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_med_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->trace->firstbyte + 1;
+    attribute->trace->error_firstbyte = attribute->trace->firstbyte + 1;
+    attribute->trace->error_afterbyte = attribute->after;
+    attribute->fault = TRUE;
+    return ;
+  }
+  if (attributes->med_set) {
+    snprintf(error, 99, "duplicate BGP MED attribute");
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_med_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->trace->firstbyte + 1;
+    attribute->trace->error_firstbyte = attribute->trace->firstbyte + 1;
+    attribute->trace->error_afterbyte = attribute->after;
+    attribute->fault = TRUE;
+    return ;
+  }
+
+  attributes->attribute_med = attribute;
+  attributes->med_set = TRUE;
+  p = (uint32_t*) attribute->content;
+  attributes->med = ntohl(*p);
+  return;
+}
+
+static const char *mrt_path_attribute_information =
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
 "Path Attributes section, part (b) AS_PATH\n"
 "[path segment][path segment][...] where a path segment is\n"
@@ -809,7 +862,58 @@ static const char *mrt_path_attribute_information =
 "[uint8 type][uint8 number of ASes in segment][N x uint32 number of ASes]\n"
 "";
 
-uint8_t mrt_check_as_path_bytes(
+void mrt_attribute_as_path(
+  struct MRT_RECORD *record
+, struct BGP_ATTRIBUTES *attributes
+, struct BGP_ATTRIBUTE *attribute
+) {
+  char error[100];
+
+  if (attributes->attribute_as_path) {
+    snprintf(error, 99, "duplicate AS_PATH attribute");
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->after;
+    attribute->trace->error_firstbyte = &(attribute->header->type);
+    attribute->trace->error_afterbyte = attribute->trace->error_firstbyte + 1;
+    attribute->fault = TRUE;
+    return;
+  }
+  attributes->attribute_as_path = attribute;
+  /* deferred decoding because we might have to deal with both
+   * AS_PATH and AS4_PATH */
+  return;
+}
+
+void mrt_attribute_as4_path(
+  struct MRT_RECORD *record
+, struct BGP_ATTRIBUTES *attributes
+, struct BGP_ATTRIBUTE *attribute
+) {
+  char error[100];
+
+  if (attributes->attribute_as4_path) {
+    snprintf(error, 99, "duplicate AS4_PATH attribute");
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->after;
+    attribute->trace->error_firstbyte = &(attribute->header->type);
+    attribute->trace->error_afterbyte = attribute->trace->error_firstbyte + 1;
+    attribute->fault = TRUE;
+    return;
+  }
+  attributes->as2or4 = BGP_AS_PATH_IS_AS2;
+  attributes->attribute_as4_path = attribute;
+  /* deferred decoding because we might have to deal with both
+   * AS_PATH and AS4_PATH */
+  return;
+}
+
+uint32_t mrt_check_as_path_bytes(
   struct BGP_ATTRIBUTE *attribute
 , size_t as_bytes
 ) {
@@ -821,6 +925,7 @@ uint8_t mrt_check_as_path_bytes(
   uint8_t *p = attribute->content;
   struct BGP_AS_PATH_SEGMENT *segment;
   size_t bytes;
+  uint32_t segments = 0;
 
   while (attribute->after - p >= 2) {
     segment = (struct BGP_AS_PATH_SEGMENT*) p;
@@ -828,28 +933,520 @@ uint8_t mrt_check_as_path_bytes(
       return 0;
     bytes = as_bytes * ((size_t) segment->ascount);
     p += sizeof(struct BGP_AS_PATH_SEGMENT) + bytes;
+    segments ++;
   }
   if (p > attribute->after) return 0;
 
-  return 1;
+  return segments;
 }
 
-void mrt_attribute_path (
+void mrt_attribute_decodepath4 (
+  struct BGP_ATTRIBUTES *attributes
+, uint32_t segments
+/* Note that the AS_PATH has already been determined to contain 4-byte AS
+ * numbers and decodes to the exact buffer size, so error checking is
+ * not necessary here.
+ */
+) {
+  struct BGP_AS_PATH *path;
+  struct BGP_AS_PATH_SEGMENT *from, *to;
+  uint8_t *p;
+  uint32_t seg, i, ascount;
+  size_t allocsize;
+
+  allocsize = sizeof(struct BGP_AS_PATH) +
+    (sizeof(struct BGP_AS_PATH_SEGMENT*) * segments);
+  path = malloc(allocsize);
+  memset (path, 0, allocsize);
+  path->numsegments = segments;
+
+  p = attributes->attribute_as_path->content;
+  for (seg=0; seg<segments; seg++) {
+    from = (struct BGP_AS_PATH_SEGMENT*) p;
+    to = malloc (sizeof(struct BGP_AS_PATH_SEGMENT) +
+      (sizeof(uint32_t) * from->ascount));
+    to->type = from->type;
+    to->ascount = from->ascount;
+    ascount = (uint32_t) (to->ascount);
+    for (i=0; i<ascount; i++) {
+      to->as4_list[i] = ntohl(from->as4_list[i]);
+    }
+    path->path[seg] = to;
+    p += (sizeof(struct BGP_AS_PATH_SEGMENT) + (sizeof(uint32_t) * ascount));
+  }
+  attributes->path = path;
+  return;
+}
+
+struct BGP_AS_PATH_SEGMENT2 {
+  uint8_t type;
+  uint8_t ascount;
+  uint16_t as2_list[];
+} __attribute__ ((__packed__));
+
+void mrt_attribute_decodepath2 (
+  struct BGP_ATTRIBUTES *attributes
+, uint32_t segments
+/* Note that the AS_PATH has already been determined to contain 2-byte AS
+ * numbers and decodes to the exact buffer size, so error checking is
+ * not necessary here.
+ */
+) {
+  struct BGP_AS_PATH *path;
+  struct BGP_AS_PATH_SEGMENT2 *from;
+  struct BGP_AS_PATH_SEGMENT *to;
+  uint8_t *p;
+  uint32_t seg, i, ascount;
+  size_t allocsize;
+
+  allocsize = sizeof(struct BGP_AS_PATH) +
+    (sizeof(struct BGP_AS_PATH_SEGMENT*) * segments);
+  path = malloc(allocsize);
+  memset (path, 0, allocsize);
+  path->numsegments = segments;
+
+  p = attributes->attribute_as_path->content;
+  for (seg=0; seg<segments; seg++) {
+    from = (struct BGP_AS_PATH_SEGMENT2*) p;
+    to = malloc (sizeof(struct BGP_AS_PATH_SEGMENT) +
+      (sizeof(uint32_t) * from->ascount));
+    to->type = from->type;
+    to->ascount = from->ascount;
+    ascount = (uint32_t) (to->ascount);
+    for (i=0; i<ascount; i++) {
+      to->as4_list[i] = (uint32_t) ntohs(from->as2_list[i]);
+    }
+    path->path[seg] = to;
+    p += (sizeof(struct BGP_AS_PATH_SEGMENT2) + (sizeof(uint16_t) * ascount));
+  }
+  attributes->path = path;
+  return;
+}
+
+void mrt_attribute_decodepath (
+  struct MRT_RECORD *record
+, struct BGP_ATTRIBUTES *attributes
+, uint8_t *firstbyte
+, uint8_t *afterbyte
+) {
+  char error[100];
+  struct BGP_AS_PATH *path;
+  uint32_t twobytes, fourbytes;
+ 
+  if (!attributes->attribute_as_path && attributes->attribute_as4_path) {
+    snprintf(error, 99, "Missing required AS_PATH");
+    error[99]=0;
+    path = malloc(sizeof(struct BGP_AS_PATH));
+    memset (path, 0, sizeof(struct BGP_AS_PATH));
+    path->fault = 1;
+    path->trace =
+      newtraceback(record, error, mrt_path_attribute_information);
+    path->trace->firstbyte = firstbyte;
+    path->trace->afterbyte = afterbyte;
+    path->trace->error_firstbyte = firstbyte;
+    path->trace->error_afterbyte = afterbyte;
+    path->fault = TRUE;
+    attributes->path = path;
+    return;
+  }
+  if (!attributes->attribute_as_path) {
+    /* likely a withdrawal message */
+    return;
+  }
+  twobytes = mrt_check_as_path_bytes(attributes->attribute_as_path, 2);
+  if (attributes->attribute_as4_path) {
+    /* decode and merge AS_PATH and AS4_PATH */
+    fourbytes = mrt_check_as_path_bytes(attributes->attribute_as4_path, 4);
+    if (!twobytes) {
+      snprintf(error, 99, "AS_PATH failed to parse");
+      error[99]=0;
+      path = malloc(sizeof(struct BGP_AS_PATH));
+      memset (path, 0, sizeof(struct BGP_AS_PATH));
+      path->trace =
+        newtraceback(record, error, mrt_path_attribute_information);
+      path->trace->firstbyte = attributes->attribute_as_path->trace->firstbyte;
+      path->trace->afterbyte = attributes->attribute_as_path->trace->afterbyte;
+      path->trace->error_firstbyte = path->trace->firstbyte;
+      path->trace->error_afterbyte = path->trace->afterbyte;
+      path->fault = TRUE;
+      attributes->path = path;
+      return;
+    }  
+    if (!fourbytes) {
+      snprintf(error, 99, "AS4_PATH failed to parse");
+      error[99]=0;
+      path = malloc(sizeof(struct BGP_AS_PATH));
+      memset (path, 0, sizeof(struct BGP_AS_PATH));
+      path->trace =
+        newtraceback(record, error, mrt_path_attribute_information);
+      path->trace->firstbyte = 
+        attributes->attribute_as4_path->trace->firstbyte;
+      path->trace->afterbyte = 
+        attributes->attribute_as4_path->trace->afterbyte;
+      path->trace->error_firstbyte = path->trace->firstbyte;
+      path->trace->error_afterbyte = path->trace->afterbyte;
+      path->fault = TRUE;
+      attributes->path = path;
+      return;
+    }
+    if (twobytes < fourbytes) {
+      snprintf(error, 99, "AS_PATH is inexplicably shorter than AS4_PATH."
+        "Impossible to merge.");
+      error[99]=0;
+      path = malloc(sizeof(struct BGP_AS_PATH));
+      memset (path, 0, sizeof(struct BGP_AS_PATH));
+      path->trace =
+        newtraceback(record, error, mrt_path_attribute_information);
+      path->trace->firstbyte = 
+        attributes->attribute_as4_path->trace->firstbyte;
+      path->trace->afterbyte = 
+        attributes->attribute_as4_path->trace->afterbyte;
+      path->trace->error_firstbyte = path->trace->firstbyte;
+      path->trace->error_afterbyte = path->trace->afterbyte;
+      path->fault = TRUE;
+      attributes->path = path;
+      return;
+    }
+    /* AS4_PATH contains the 4-byte AS path up to the last router that could
+     * handle 4-byte AS paths. AS_PATH contains 0 or more two-byte AS numbers
+     * from later in the path. Initialize our path with AS_PATH and then
+     * copy in the contents of AS4_PATH. */
+    mrt_attribute_decodepath2(attributes, twobytes);
+    /* FIXME: actually merge the contents of AS4_PATH */
+
+    return;
+  }
+  /* only have AS_PATH which may use either 2 or 4 byte AS numbers */
+  fourbytes = mrt_check_as_path_bytes(attributes->attribute_as_path, 4);
+  if (!twobytes && !fourbytes) {
+    snprintf(error, 99, "AS_PATH failed to parse");
+    error[99]=0;
+    path = malloc(sizeof(struct BGP_AS_PATH));
+    memset (path, 0, sizeof(struct BGP_AS_PATH));
+    path->trace =
+      newtraceback(record, error, mrt_path_attribute_information);
+    path->trace->firstbyte = attributes->attribute_as_path->trace->firstbyte;
+    path->trace->afterbyte = attributes->attribute_as_path->trace->afterbyte;
+    path->trace->error_firstbyte = path->trace->firstbyte;
+    path->trace->error_afterbyte = path->trace->afterbyte;
+    path->fault = TRUE;
+    attributes->path = path;
+    return;
+  }
+  if (twobytes && fourbytes) {
+    if (attributes->as2or4 == BGP_AS_PATH_IS_AS2) fourbytes = 0;
+    else if (attributes->as2or4 == BGP_AS_PATH_IS_AS4) twobytes = 0;
+    /* else set error later that we couldn't reliably decode the AS path */
+  }
+
+  if (fourbytes) mrt_attribute_decodepath4(attributes, fourbytes);
+  else mrt_attribute_decodepath2(attributes, twobytes);
+  attributes->path->attr = attributes->attribute_as_path;
+  attributes->path->trace = attributes->attribute_as_path->trace;
+  if (twobytes && fourbytes) {
+    snprintf(error, 99,
+      "Ambiguous whether AS_PATH uses 2 or 4 byte AS numbers. Decoded as 4.");
+    error[99]=0;
+    attributes->path->trace =
+      newtraceback(record, error, mrt_path_attribute_information);
+    attributes->path->trace->firstbyte = 
+      attributes->attribute_as_path->trace->firstbyte;
+    attributes->path->trace->afterbyte = 
+      attributes->attribute_as_path->trace->afterbyte;
+  }
+  return;
+}
+
+char *mrt_aspath_to_string (struct BGP_AS_PATH *path) {
+  char *s, *p;
+  size_t length = 1;
+  uint32_t segment, i;
+
+  for (segment=0; segment < path->numsegments; segment++) {
+    length += 6 + (11 * ((uint32_t) path->path[segment]->ascount));
+  }
+  s = (char*) malloc(length);
+  s[0]=0;
+  p = s;
+  for (segment=0; segment<path->numsegments; segment++) {
+    if (path->path[segment]->type == BGP_AS_SET) {
+      strcpy(p, "[ ");
+      p += 2;
+    }
+    for (i=0; i<path->path[segment]->ascount; i++) {
+      sprintf (p, "%u ", path->path[segment]->as4_list[i]);
+      p += strlen(p);
+    }
+    if (path->path[segment]->type == BGP_AS_SET) {
+      strcpy(p, "] ");
+      p += 2;
+    }
+  }
+  if ((p>s) && (p[-1]==' ')) p[-1] = 0;
+  return s;
+}
+
+static const char *mrt_communities_attribute_information =
+"https://datatracker.ietf.org/doc/html/rfc1997\n"
+"[uint8 flags][uint8 type 08][uint8 or uint16 length (extended length flag)]\n"
+"[uint32_t community][uint32_t community][...][uint32_t community]\n"
+"";
+
+void mrt_attribute_communities (
   struct MRT_RECORD *record
 , struct BGP_ATTRIBUTES *attributes
 , struct BGP_ATTRIBUTE *attribute
-, uint8_t fourbyteas
 ) {
   char error[100];
+  uint32_t num, i, *p;
+  struct BGP_COMMUNITIES *c;
+  size_t csize;
 
-  if (!fourbyteas) fourbyteas = mrt_check_as_path_bytes(attribute, 4);
- 
-  // remove remaining stuff when function is complete 
-  // it's just there to make the warnings go away
-  error[0]=mrt_path_attribute_information[0];
-  error[1]=error[0];
+  if (attributes->communities) {
+    snprintf(error, 99,
+      "duplicate communities attribute ignored");
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_communities_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->trace->firstbyte + 1;
+    attribute->trace->error_firstbyte = attribute->trace->firstbyte;
+    attribute->trace->error_afterbyte = attribute->after;
+    attribute->fault = TRUE;
+    return ;
+  }
+  num = (attribute->after - attribute->content);
+  if ((num % sizeof(uint32_t)) != 0) {
+    snprintf(error, 99, "communities are 32 bits each, but %u content "
+      "size is not divisible by 4", num);
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_communities_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->trace->firstbyte + 1;
+    attribute->trace->error_firstbyte = attribute->trace->firstbyte;
+    attribute->trace->error_afterbyte = attribute->after;
+    attribute->fault = TRUE;
+    return ;
+  }
+  num /= 4;
+  csize = sizeof(struct BGP_COMMUNITIES) + (sizeof(uint32_t) * num);
+
+  c = (struct BGP_COMMUNITIES*) malloc (csize);
+  memset (c, 0, csize);
+  c->num = num;
+  c->attr = attribute;
+  p = (uint32_t*) attribute->content;
+  for (i=0; i<num; i++, p++) {
+    c->c[i] = ntohl(*p);
+  }
+  attributes->communities = c;
+
   return;
 }
+
+char *mrt_communities_to_string (struct BGP_COMMUNITIES *communities) {
+  char *s, *p;
+  size_t length;
+  uint32_t i;
+
+  if (!communities) return NULL;
+  length = 2 + (12 * communities->num);
+  s = (char*) malloc(length);
+  s[0]=0;
+  p = s;
+  for (i=0; i < communities->num; i++) {
+    sprintf (p, "%u:%u ", (communities->c[i] & 0xFFFF0000) >> 16,
+      (communities->c[i] & 0xFFFF));
+    p += strlen(p);
+  }
+  if ((p>s) && (p[-1]==' ')) p[-1] = 0;
+  return s;
+}
+
+static const char *mrt_large_communities_attribute_information =
+"https://datatracker.ietf.org/doc/html/rfc8092\n"
+"[uint8 flags][uint8 type 32][uint8 or uint16 length (extended length flag)]\n"
+"[community][community][...][community]\n"
+"Where community = [uint32 global][uint32 local1][uint32 local2]\n"
+"";
+
+void mrt_attribute_large_communities (
+  struct MRT_RECORD *record
+, struct BGP_ATTRIBUTES *attributes
+, struct BGP_ATTRIBUTE *attribute
+) {
+  char error[100];
+  uint32_t num, i;
+  struct BGP_LARGE_COMMMUNITY *p;
+  struct BGP_LARGE_COMMUNITIES *c;
+  size_t csize;
+
+  if (attributes->large_communities) {
+    snprintf(error, 99,
+      "duplicate large communities attribute ignored");
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_large_communities_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->trace->firstbyte + 1;
+    attribute->trace->error_firstbyte = attribute->trace->firstbyte;
+    attribute->trace->error_afterbyte = attribute->after;
+    attribute->fault = TRUE;
+    return ;
+  }
+  num = (attribute->after - attribute->content);
+  if ((num % sizeof(struct BGP_LARGE_COMMMUNITY)) != 0) {
+    snprintf(error, 99, "large communities are 12 bytes each, but %u content "
+      "size is not divisible by 12", num);
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_large_communities_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->trace->firstbyte + 1;
+    attribute->trace->error_firstbyte = attribute->trace->firstbyte;
+    attribute->trace->error_afterbyte = attribute->after;
+    attribute->fault = TRUE;
+    return ;
+  }
+  num /= 12;
+  csize = sizeof(struct BGP_COMMUNITIES) + 
+    (sizeof(struct BGP_LARGE_COMMMUNITY) * num);
+
+  c = (struct BGP_LARGE_COMMUNITIES*) malloc (csize);
+  memset (c, 0, csize);
+  c->num = num;
+  c->attr = attribute;
+  p = (struct BGP_LARGE_COMMMUNITY*) attribute->content;
+  for (i=0; i<num; i++, p++) {
+    c->c[i].global = ntohl(p->global);
+    c->c[i].local1 = ntohl(p->local1);
+    c->c[i].local2 = ntohl(p->local2);
+  }
+  attributes->large_communities = c;
+
+  return;
+}
+
+char *mrt_large_communities_to_string (
+  struct BGP_LARGE_COMMUNITIES *communities
+) {
+  char *s, *p;
+  size_t length;
+  uint32_t i;
+
+  if (!communities) return NULL;
+  length = 2 + (38 * communities->num);
+  s = (char*) malloc(length);
+  s[0]=0;
+  p = s;
+  for (i=0; i < communities->num; i++) {
+    sprintf (p, "%u:%u:%u ", communities->c[i].global, 
+      communities->c[i].local1, communities->c[i].local2);
+    p += strlen(p);
+  }
+  if ((p>s) && (p[-1]==' ')) p[-1] = 0;
+  return s;
+}
+
+static const char *mrt_extended_communities_attribute_information =
+"https://datatracker.ietf.org/doc/html/rfc4360#section-1\n"
+"[community][community][...][community]\n"
+"Where community = [uint8 type][7 bytes - variable]\n"
+"";
+
+void mrt_attribute_extended_communities (
+  struct MRT_RECORD *record
+, struct BGP_ATTRIBUTES *attributes
+, struct BGP_ATTRIBUTE *attribute
+) {
+  char error[100];
+  uint32_t num, i;
+  struct BGP_LARGE_COMMMUNITY *p;
+  struct BGP_LARGE_COMMUNITIES *c;
+  size_t csize;
+
+  if (attributes->large_communities) {
+    snprintf(error, 99,
+      "duplicate large communities attribute ignored");
+    error[99]=0;
+    attribute->trace = newtraceback(record, error,
+      mrt_extended_communities_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->trace->firstbyte + 1;
+    attribute->trace->error_firstbyte = attribute->trace->firstbyte;
+    attribute->trace->error_afterbyte = attribute->after;
+    attribute->fault = TRUE;
+    return ;
+  }
+  num = (attribute->after - attribute->content);
+  if ((num % sizeof(struct BGP_LARGE_COMMMUNITY)) != 0) {
+    snprintf(error, 99, "large communities are 12 bytes each, but %u content "
+      "size is not divisible by 12", num);
+    error[99]=0;
+    attribute->trace = newtraceback(record, error,
+      mrt_extended_communities_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->trace->firstbyte + 1;
+    attribute->trace->error_firstbyte = attribute->trace->firstbyte;
+    attribute->trace->error_afterbyte = attribute->after;
+    attribute->fault = TRUE;
+    return ;
+  }
+  num /= 12;
+  csize = sizeof(struct BGP_COMMUNITIES) + 
+    (sizeof(struct BGP_LARGE_COMMMUNITY) * num);
+
+  c = (struct BGP_LARGE_COMMUNITIES*) malloc (csize);
+  memset (c, 0, csize);
+  c->num = num;
+  c->attr = attribute;
+  p = (struct BGP_LARGE_COMMMUNITY*) attribute->content;
+  for (i=0; i<num; i++, p++) {
+    c->c[i].global = ntohl(p->global);
+    c->c[i].local1 = ntohl(p->local1);
+    c->c[i].local2 = ntohl(p->local2);
+  }
+  attributes->large_communities = c;
+
+  return;
+}
+
+char *mrt_extended_communities_to_string (
+  struct BGP_EXTENDED_COMMUNITIES *communities
+) {
+  char *s, *p;
+  size_t length;
+  uint32_t i;
+
+  if (!communities) return NULL;
+  length = 2 + (30 * communities->num);
+  s = (char*) malloc(length);
+  s[0]=0;
+  p = s;
+  for (i=0; i < communities->num; i++) {
+    switch (communities->c[i].type.bits.type) {
+      case 0: /* two-octect global AS:local */
+        sprintf(p, "%02x%02x:%u:%u ", communities->c[i].type.type,
+          communities->c[i].as.subtype, communities->c[i].as.global,
+          communities->c[i].as.local);
+        break;
+      case 1: /* two-octet IP:local */
+        sprintf(p, "%02x%02x:" PRI_IPV4 ":%u ", communities->c[i].type.type,
+          communities->c[i].ip.subtype, 
+          PRI_IPV4_V(communities->c[i].ip.global),
+          (uint32_t) communities->c[i].ip.local);
+      default: /* opaque */
+        sprintf(p, "%02x:%lx ", communities->c[i].type.type,
+          (uint64_t) communities->c[i].one.value);
+        break;
+    }
+    p += strlen(p);
+  }
+  if ((p>s) && (p[-1]==' ')) p[-1] = 0;
+  return s;
+}
+
 
 static const char *mrt_update_information =
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
@@ -879,7 +1476,7 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
   uint16_t length;
 
   count = mrt_count_attributes(firstbyte, afterbyte);
-  structsize = sizeof(struct BGP_ATTRIBUTES) + 
+  structsize = sizeof(struct BGP_ATTRIBUTES) +
     (sizeof(struct BGP_ATTRIBUTE) * (count + 1));
   attributes = (struct BGP_ATTRIBUTES*) malloc (structsize);
   assert (attributes != NULL);
@@ -893,17 +1490,17 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
     if ((afterbyte - p) < (sizeof(struct BGP_ATTRIBUTE_HEADER)-1))
       badflag = TRUE;
     if (!badflag) {
-      if ( (attribute->header->extended_length) && 
+      if ( (attribute->header->extended_length) &&
          ((afterbyte - p) < sizeof(struct BGP_ATTRIBUTE_HEADER)) )
         badflag = TRUE;
     }
     if (badflag) {
-      snprintf(error, 199, 
+      snprintf(error, 199,
           "attribute header %lu bytes but only %u available",
-          sizeof(struct BGP_ATTRIBUTE_HEADER), 
+          sizeof(struct BGP_ATTRIBUTE_HEADER),
           (unsigned int) (afterbyte - p) );
       error[199]=0;
-      attribute->trace = 
+      attribute->trace =
         newtraceback(record, error, mrt_update_information);
       attribute->trace->firstbyte = (uint8_t*) attribute->header;
       attribute->trace->afterbyte = afterbyte;
@@ -927,13 +1524,13 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
     attribute->content = p;
     attribute->after = attribute->content + length;
     if (attribute->after > afterbyte) {
-      snprintf(error, 199, 
+      snprintf(error, 199,
         "attribute length %u+%u bytes but only %u available",
         (unsigned int) (p - ((uint8_t*) attribute->header)),
-        (unsigned int) length, 
+        (unsigned int) length,
         (unsigned int) (afterbyte - ((uint8_t*) attribute->header)) );
       error[199]=0;
-      attribute->trace = 
+      attribute->trace =
         newtraceback(record, error, mrt_attribute_information);
       attribute->trace->firstbyte = (uint8_t*) attribute->header;
       attribute->trace->afterbyte = afterbyte;
@@ -951,11 +1548,16 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
         mrt_attribute_origin(record, attributes, attribute);
         break;
       case BGP_AS_PATH:
+        mrt_attribute_as_path(record, attributes, attribute);
+        break;
+      case BGP_AS4_PATH:
+        mrt_attribute_as4_path(record, attributes, attribute);
         break;
       case BGP_NEXT_HOP:
         mrt_attribute_next_hop(record, attributes, attribute);
         break;
       case BGP_MED:
+        mrt_attribute_med(record, attributes, attribute);
         break;
       case BGP_LOCAL_PREF:
         mrt_attribute_local_pref(record, attributes, attribute);
@@ -972,6 +1574,12 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
       case BGP_MP_REACH_NLRI:
         mrt_attribute_mp_reach_nlri(record, attributes, attribute);
         break;
+      case BGP_COMMUNITIES:
+        mrt_attribute_communities(record, attributes, attribute);
+        break;
+      case BGP_LARGE_COMMUNITIES:
+        mrt_attribute_large_communities(record, attributes, attribute);
+        break;
       default:
     };
     p = attribute->after;
@@ -985,7 +1593,7 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
     snprintf(error, 199, "attributes overflowed buffer length %u",
         (unsigned int) (afterbyte - firstbyte));
     error[199]=0;
-    attributes->trace = 
+    attributes->trace =
       newtraceback(record, error, mrt_update_information);
     attributes->trace->firstbyte = firstbyte;
     attributes->trace->afterbyte = afterbyte;
@@ -995,6 +1603,7 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
     attributes->trace = newtraceback(record, NULL, mrt_update_information);
     attributes->trace->firstbyte = firstbyte;
     attributes->trace->afterbyte = afterbyte;
+    mrt_attribute_decodepath (record, attributes, firstbyte, afterbyte);
   }
 
   /* sort here */
@@ -1002,8 +1611,23 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
   return attributes;
 }
 
+void mrt_free_path (
+  struct BGP_AS_PATH *path
+) {
+  int i;
 
-static const char *mrt_nlri_information = 
+  if (!path) return;
+  if (path->trace) {
+    if (!(path->attr && (path->attr->trace == path->trace)))
+      free(path->trace);
+  }
+  for (i=0; i<path->numsegments; i++)
+    if (path->path[i]) free(path->path[i]);
+  free(path);
+  return;
+}
+
+static const char *mrt_nlri_information =
 "https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
 "Network Layer Reachability Information\n"
 "[uint8 prefix length][0 or more bytes, minimum needed for the prefix len]\n"
@@ -1029,8 +1653,8 @@ uint8_t *mrt_nlri_consume_one (
   if ((firstbyte + prefix_bytes + 1) > afterbyte) {
     /* routing prefix would overflow the available buffer */
     nlri->fault_flag = TRUE;
-    snprintf (error, 199, 
-      "nlri prefix length %u requires %u bytes but only has %u",
+    snprintf (error, 199,
+      "NLRI prefix length %u requires %u bytes but only has %u",
       (unsigned int) nlri->prefix_len, (unsigned int) prefix_bytes,
       (unsigned int) (afterbyte - firstbyte - 1));
     error[199]=0;
@@ -1041,7 +1665,7 @@ uint8_t *mrt_nlri_consume_one (
     nlri->trace->error_afterbyte = nlri->trace->firstbyte;
     nlri->trace->overflow_firstbyte = afterbyte;
     nlri->trace->overflow_afterbyte = nlri->trace->firstbyte + prefix_bytes;
-  
+ 
     return firstbyte + prefix_bytes + 1;
   }
   /* sanity-check prefix length */
@@ -1052,9 +1676,9 @@ uint8_t *mrt_nlri_consume_one (
       if (nlri->prefix_len <= 128) break;
       /* insane netmask */
       nlri->fault_flag = TRUE;
-      snprintf (error, 199, 
-        "nlri prefix length %u too long for address family %s",
-        (unsigned int) nlri->prefix_len, 
+      snprintf (error, 199,
+        "NLRI prefix length %u too long for address family %s",
+        (unsigned int) nlri->prefix_len,
         (address_family==BGP4MP_AFI_IPV4)?"IPv4":"IPv6");
       error[199]=0;
       nlri->trace = newtraceback(record, error, mrt_nlri_information);
@@ -1066,10 +1690,10 @@ uint8_t *mrt_nlri_consume_one (
     default:
       /* unknown address family */
       nlri->fault_flag = TRUE;
-      snprintf (error, 199, 
-        "nlri unknown address family 0x%x with prefix of length %u",
+      snprintf (error, 199,
+        "NLRI unknown address family 0x%x with prefix of length %u",
         (unsigned int) address_family,
-        (unsigned int) nlri->prefix_len); 
+        (unsigned int) nlri->prefix_len);
       error[199]=0;
       nlri->trace = newtraceback(record, error, NULL);
       nlri->trace->firstbyte = firstbyte;
@@ -1086,18 +1710,18 @@ uint8_t *mrt_nlri_consume_one (
       if (memcmp(&(nlri->ipv4), &netv4, sizeof(netv4)) != 0) {
         /* Prefix does not match prefix length */
         nlri->fault_flag = TRUE;
-        snprintf (error, 199, 
-          "nlri IPv4 prefix " PRI_IPV4 "/%u wrong. " PRI_IPV4 " is "
-          "correct for /%u",
+        snprintf (error, 199,
+          "NLRI IPv4 prefix " PRI_IPV4 "/%u is wrong. Would be " 
+          PRI_IPV4 "/%u",
           PRI_IPV4_V(nlri->ipv4), (unsigned int) nlri->prefix_len,
-          PRI_IPV4_V(netv4), (unsigned int) nlri->prefix_len); 
+          PRI_IPV4_V(netv4), (unsigned int) nlri->prefix_len);
         error[199]=0;
         nlri->trace = newtraceback(record, error, NULL);
         nlri->trace->firstbyte = firstbyte;
         nlri->trace->afterbyte = nlri->trace->firstbyte + prefix_bytes + 1;
         nlri->trace->error_firstbyte = nlri->trace->firstbyte + 1;
         nlri->trace->error_afterbyte = nlri->trace->afterbyte;
-      }      
+      }     
       break;
     case BGP4MP_AFI_IPV6:
       memset(&(nlri->ipv6), 0, sizeof(nlri->ipv6));
@@ -1105,11 +1729,11 @@ uint8_t *mrt_nlri_consume_one (
       netv6 = ipv6_apply_netmask(nlri->ipv6, nlri->prefix_len);
       if (memcmp(&(nlri->ipv6), &netv6, sizeof(netv6)) != 0) {
         /* Prefix does not match prefix length */
-        snprintf (error, 199, 
-          "nlri IPv6 prefix " PRI_IPV6 "/%u wrong. " PRI_IPV6 " is "
-          "correct for /%u",
+        snprintf (error, 199,
+          "NLRI IPv6 prefix " PRI_IPV6 "/%u is wrong. Would be " 
+          PRI_IPV6 "/%u",
           PRI_IPV6_V(nlri->ipv6), (unsigned int) nlri->prefix_len,
-          PRI_IPV6_V(netv6), (unsigned int) nlri->prefix_len); 
+          PRI_IPV6_V(netv6), (unsigned int) nlri->prefix_len);
         error[199]=0;
         nlri->trace = newtraceback(record, error, NULL);
         nlri->trace->firstbyte = firstbyte;
@@ -1117,7 +1741,7 @@ uint8_t *mrt_nlri_consume_one (
         nlri->trace->error_firstbyte = nlri->trace->firstbyte + 1;
         nlri->trace->error_afterbyte = nlri->trace->afterbyte;
         nlri->fault_flag = TRUE;
-      }      
+      }     
       break;
     default: /* not reachable */
   }
@@ -1127,7 +1751,7 @@ uint8_t *mrt_nlri_consume_one (
     nlri->trace->firstbyte = firstbyte;
     nlri->trace->afterbyte = firstbyte + prefix_bytes + 1;
   }
-  
+ 
   return nlri->trace->afterbyte;
 }
 
@@ -1186,7 +1810,7 @@ struct NLRI_LIST *mrt_nlri_deserialize (
     /* overran buffer deserializing prefixes */
     char error[200];
     snprintf (error, 199,
-        "nlri buffer of %u bytes did not align with the encoded prefixes",
+        "NLRI buffer of %u bytes did not align with the encoded prefixes",
         (unsigned int) (afterbyte - firstbyte));
     error[199]=0;
     list->error = newtraceback(record, error, (from_attribute_flag)?
@@ -1194,10 +1818,40 @@ struct NLRI_LIST *mrt_nlri_deserialize (
     list->error->firstbyte = firstbyte;
     list->error->afterbyte = afterbyte;
     list->error->error_firstbyte = (uint8_t*) length;
-    list->error->error_afterbyte = 
+    list->error->error_afterbyte =
       list->error->error_firstbyte + sizeof(uint16_t);
   }
   return (struct NLRI_LIST*) buffer;
+}
+
+void mrt_free_attributes(struct BGP_ATTRIBUTES *attributes)
+{
+  int i;
+  if (!attributes) return;
+
+  mrt_free_path (attributes->path);
+  if (attributes->communities) free(attributes->communities);
+  if (attributes->large_communities) free(attributes->large_communities);
+  if (attributes->extended_communities) free(attributes->extended_communities);
+  for (i=0; i < attributes->numattributes; i++) {
+    if (attributes->attr[i].trace)
+      free(attributes->attr[i].trace);
+    switch (attributes->attr[i].type) {
+      /* type-specific free operations */
+      case BGP_MP_REACH_NLRI:
+        break; /* freed below with mrt_free_nlri() */
+      default: /* simple free */
+        if (attributes->attr[i].unknown)
+          free(attributes->attr[i].unknown);
+    };
+  }
+  if (attributes->mp_reach_nlri) {
+    mrt_free_nlri(&(attributes->mp_reach_nlri->l), TRUE);
+    free(attributes->mp_reach_nlri);
+  }
+  if (attributes->trace) free(attributes->trace);
+  free(attributes);
+  return;
 }
 
 void mrt_free_bgp4mp_message (struct BGP4MP_MESSAGE *m) {
@@ -1290,7 +1944,7 @@ struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
     m->peeras = ntohl(m->bgp4mp->peeras4);
     m->localas = ntohl(m->bgp4mp->localas4);
     m->header = &(m->bgp4mp->head4);
-    m->trace_as = newtraceback(record, NULL, 
+    m->trace_as = newtraceback(record, NULL,
                     mrt_bgp4mp_message_as4_information);
     m->trace_as->firstbyte = (uint8_t*) m->bgp4mp;
     m->trace_as->afterbyte = (uint8_t*) m->header;
@@ -1322,7 +1976,7 @@ struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
       }
       m->local_ipv6 = &(m->header->local6);
       m->bgp = m->header->bgp_message6;
-      m->trace_peerip = newtraceback(record, NULL, 
+      m->trace_peerip = newtraceback(record, NULL,
          (record->mrt->subtype == BGP4MP_MESSAGE)?
          mrt_bgp4mp_message_information:mrt_bgp4mp_message_as4_information);
       m->trace_peerip->firstbyte = (uint8_t*) m->peer_ipv6;
@@ -1331,7 +1985,7 @@ struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
     case BGP4MP_AFI_IPV4:
       m->local_ipv4 = &(m->header->local4);
       m->bgp = m->header->bgp_message4;
-      m->trace_peerip = newtraceback(record, NULL, 
+      m->trace_peerip = newtraceback(record, NULL,
          (record->mrt->subtype == BGP4MP_MESSAGE)?
          mrt_bgp4mp_message_information:mrt_bgp4mp_message_as4_information);
       m->trace_peerip->firstbyte = (uint8_t*) m->peer_ipv4;
@@ -1366,7 +2020,7 @@ struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
   if (((uint8_t*)m->bgp) + ntohs(m->bgp->length) != record->aftermrt) {
     snprintf (error, 199, "deserialize_bgp4mp MRT-derived length %lu bytes"
       " != with BGP %u bytes",
-      record->aftermrt - record->mrt_message, 
+      record->aftermrt - record->mrt_message,
       (unsigned int) ntohs(m->bgp->length));
     error[199]=0;
     m->error = newtraceback(record, error, mrt_bgp_update_information);
@@ -1402,7 +2056,7 @@ struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
     m->error->overflow_firstbyte = record->aftermrt;
     m->error->overflow_afterbyte = m->path_attributes_firstbyte;
     m->error->error_firstbyte = (uint8_t*) &(m->bgp->withdrawn_routes_length);
-    m->error->error_afterbyte = (uint8_t*) 
+    m->error->error_afterbyte = (uint8_t*)
       (&(m->bgp->withdrawn_routes_length) + 1);
     return m;
   }
@@ -1422,13 +2076,13 @@ struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
     m->error->error_afterbyte = m->path_attributes_firstbyte;
     return m;
   }
-  /* We have a BGP update message whose core lengths make sense 
+  /* We have a BGP update message whose core lengths make sense
    * Next, deserialize the prefixes and attributes */
   m->withdrawals = mrt_nlri_deserialize(record,
-    m->withdrawals_firstbyte, m->withdrawals_afterbyte, 
+    m->withdrawals_firstbyte, m->withdrawals_afterbyte,
     &(m->bgp->withdrawn_routes_length),
     m->header->address_family, FALSE, 0);
-  m->nlri = mrt_nlri_deserialize(record, m->nlri_firstbyte, m->nlri_afterbyte, 
+  m->nlri = mrt_nlri_deserialize(record, m->nlri_firstbyte, m->nlri_afterbyte,
     m->path_attributes_length, m->header->address_family, FALSE, 0);
   m->attributes = mrt_extract_attributes(record, m->path_attributes_firstbyte,
     m->path_attributes_afterbyte, m->header->address_family);
@@ -1437,7 +2091,7 @@ struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
   return m;
 }
 
-static const char *mrt_extended_format = 
+static const char *mrt_extended_format =
 "https://datatracker.ietf.org/doc/html/rfc6396#section-3\n"
 "[uint32 timestamp][uint16 message type][uint16 subtype]\n"
 "[uint32 length in bytes][uint32 microseconds][record of length-4 bytes]";
@@ -1471,7 +2125,7 @@ uint8_t *mrt_extended_header_process(struct MRT_RECORD *record)
         /* error: extended header overflows the buffer */
         char error[200];
 
-        snprintf (error, 199, 
+        snprintf (error, 199,
             "%u: short extended header type %d/%d (%u bytes)\n",
             (unsigned int) record->seconds,
             (int) ntohs(record->mrt->type),
@@ -1481,20 +2135,20 @@ uint8_t *mrt_extended_header_process(struct MRT_RECORD *record)
         error[199]=0;
         trace = newtraceback(record, error, mrt_extended_format);
         record->trace_microseconds = trace;
-        trace->firstbyte = 
+        trace->firstbyte =
           (uint8_t*) &(record->extended->microsecond_timestamp);
         trace->afterbyte = record->aftermrt;
         trace->overflow_firstbyte = trace->afterbyte;
         trace->overflow_afterbyte = record->extended->message;
         trace->error_firstbyte = (uint8_t*) &(record->mrt->type);
-        trace->error_afterbyte = 
+        trace->error_afterbyte =
           trace->error_firstbyte + sizeof(record->mrt->type);
         return NULL;
       }
       /* extended header is present */
       trace = newtraceback(record, NULL, mrt_extended_format);
       record->trace_microseconds = trace;
-      trace->firstbyte = 
+      trace->firstbyte =
         (uint8_t*) &(record->extended->microsecond_timestamp);
       trace->afterbyte = record->extended->message;
       record->mrt_message = record->extended->message;
@@ -1508,7 +2162,7 @@ uint8_t *mrt_extended_header_process(struct MRT_RECORD *record)
   return record->mrt_message;
 }
 
-static const char *mrt_overall_format = 
+static const char *mrt_overall_format =
 "https://datatracker.ietf.org/doc/html/rfc6396#section-2\n"
 "[uint32 timestamp][uint16 message type][uint16 subtype]\n"
 "[uint32 length in bytes][record of length bytes]";
@@ -1538,17 +2192,17 @@ struct MRT_RECORD *mrt_read_record(
     error[99]=0;
     record->mrt = (struct MRT_COMMON_HEADER*) malloc(r);
     assert(record->mrt!=NULL);
-    memcpy ((void*) record->mrt, &header, r); 
+    memcpy ((void*) record->mrt, &header, r);
     tr = newtraceback(record, error, mrt_overall_format);
     record->trace_read = tr;
     tr->firstbyte = (uint8_t*) tr->mrt;
     tr->afterbyte = tr->firstbyte + r;
     tr->aftermrt = tr->afterbyte;
     record->aftermrt = tr->aftermrt;
-    tr->error_firstbyte = tr->firstbyte; 
+    tr->error_firstbyte = tr->firstbyte;
     tr->error_afterbyte = tr->firstbyte + sizeof(header);
     record->read_failed = TRUE;
-    return record; 
+    return record;
   }
 
   /* got at least an mrt header. Read the number of bytes the header says
