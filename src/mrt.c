@@ -1278,7 +1278,7 @@ void mrt_attribute_large_communities (
 ) {
   char error[100];
   uint32_t num, i;
-  struct BGP_LARGE_COMMMUNITY *p;
+  struct BGP_LARGE_COMMUNITY *p;
   struct BGP_LARGE_COMMUNITIES *c;
   size_t csize;
 
@@ -1296,7 +1296,7 @@ void mrt_attribute_large_communities (
     return ;
   }
   num = (attribute->after - attribute->content);
-  if ((num % sizeof(struct BGP_LARGE_COMMMUNITY)) != 0) {
+  if ((num % sizeof(struct BGP_LARGE_COMMUNITY)) != 0) {
     snprintf(error, 99, "large communities are 12 bytes each, but %u content "
       "size is not divisible by 12", num);
     error[99]=0;
@@ -1309,15 +1309,15 @@ void mrt_attribute_large_communities (
     attribute->fault = TRUE;
     return ;
   }
-  num /= 12;
-  csize = sizeof(struct BGP_COMMUNITIES) + 
-    (sizeof(struct BGP_LARGE_COMMMUNITY) * num);
+  num /= sizeof(struct BGP_LARGE_COMMUNITY);
+  csize = sizeof(struct BGP_LARGE_COMMUNITIES) + 
+    (sizeof(struct BGP_LARGE_COMMUNITY) * num);
 
   c = (struct BGP_LARGE_COMMUNITIES*) malloc (csize);
   memset (c, 0, csize);
   c->num = num;
   c->attr = attribute;
-  p = (struct BGP_LARGE_COMMMUNITY*) attribute->content;
+  p = (struct BGP_LARGE_COMMUNITY*) attribute->content;
   for (i=0; i<num; i++, p++) {
     c->c[i].global = ntohl(p->global);
     c->c[i].local1 = ntohl(p->local1);
@@ -1362,13 +1362,14 @@ void mrt_attribute_extended_communities (
 ) {
   char error[100];
   uint32_t num, i;
-  struct BGP_LARGE_COMMMUNITY *p;
-  struct BGP_LARGE_COMMUNITIES *c;
+  struct BGP_EXTENDED_COMMUNITY *p;
+  struct BGP_EXTENDED_COMMUNITIES *c;
   size_t csize;
+  uint8_t t;
 
-  if (attributes->large_communities) {
+  if (attributes->extended_communities) {
     snprintf(error, 99,
-      "duplicate large communities attribute ignored");
+      "duplicate extended communities attribute ignored");
     error[99]=0;
     attribute->trace = newtraceback(record, error,
       mrt_extended_communities_attribute_information);
@@ -1380,9 +1381,11 @@ void mrt_attribute_extended_communities (
     return ;
   }
   num = (attribute->after - attribute->content);
-  if ((num % sizeof(struct BGP_LARGE_COMMMUNITY)) != 0) {
-    snprintf(error, 99, "large communities are 12 bytes each, but %u content "
-      "size is not divisible by 12", num);
+  if ((num % sizeof(struct BGP_EXTENDED_COMMUNITY)) != 0) {
+    snprintf(error, 99, "large communities are %u bytes each, "
+      "but %u content size is not divisible by %u", 
+      (unsigned int) sizeof(struct BGP_EXTENDED_COMMUNITY), num,
+      (unsigned int) sizeof(struct BGP_EXTENDED_COMMUNITY));
     error[99]=0;
     attribute->trace = newtraceback(record, error,
       mrt_extended_communities_attribute_information);
@@ -1393,21 +1396,60 @@ void mrt_attribute_extended_communities (
     attribute->fault = TRUE;
     return ;
   }
-  num /= 12;
-  csize = sizeof(struct BGP_COMMUNITIES) + 
-    (sizeof(struct BGP_LARGE_COMMMUNITY) * num);
+  num /= sizeof(struct BGP_EXTENDED_COMMUNITY);
+  csize = sizeof(struct BGP_EXTENDED_COMMUNITIES) + 
+    (sizeof(struct BGP_EXTENDED_COMMUNITY) * num);
 
-  c = (struct BGP_LARGE_COMMUNITIES*) malloc (csize);
+  c = (struct BGP_EXTENDED_COMMUNITIES*) malloc (csize);
   memset (c, 0, csize);
   c->num = num;
   c->attr = attribute;
-  p = (struct BGP_LARGE_COMMMUNITY*) attribute->content;
+  p = (struct BGP_EXTENDED_COMMUNITY*) attribute->content;
   for (i=0; i<num; i++, p++) {
-    c->c[i].global = ntohl(p->global);
-    c->c[i].local1 = ntohl(p->local1);
-    c->c[i].local2 = ntohl(p->local2);
+#   if __BYTE_ORDER == __LITTLE_ENDIAN
+      switch (p->type.bits.type) {
+        case 0: /* two-octet global AS:local */
+          c->c[i].as.high = p->as.high;
+          c->c[i].as.subtype = p->as.subtype;
+          c->c[i].as.global = ntohs(p->as.global);
+          c->c[i].as.local = ntohl(p->as.local);
+          break;
+        case 1: /* two-octet IP:local */
+          c->c[i].ip.high = p->ip.high;
+          c->c[i].ip.subtype = p->ip.subtype;
+          c->c[i].ip.global = p->ip.global;
+          c->c[i].ip.local = ntohs(p->ip.local);
+          break;
+        case 2: /* opaque w/ sub-type */
+          c->c[i] = *p;
+          t = p->opaque.value_bytes[0];
+          p->opaque.value_bytes[0] = p->opaque.value_bytes[5];
+          p->opaque.value_bytes[5] = t;
+          t = p->opaque.value_bytes[1];
+          p->opaque.value_bytes[1] = p->opaque.value_bytes[4];
+          p->opaque.value_bytes[4] = t;
+          t = p->opaque.value_bytes[2];
+          p->opaque.value_bytes[2] = p->opaque.value_bytes[3];
+          p->opaque.value_bytes[3] = t;
+          break;
+        default: /* opaque */
+          c->c[i] = *p;
+          t = p->one.value_bytes[0];
+          p->one.value_bytes[0] = p->one.value_bytes[6];
+          p->one.value_bytes[6] = t;
+          t = p->one.value_bytes[1];
+          p->one.value_bytes[1] = p->one.value_bytes[5];
+          p->one.value_bytes[5] = t;
+          t = p->one.value_bytes[2];
+          p->one.value_bytes[2] = p->one.value_bytes[4];
+          p->one.value_bytes[4] = t;
+          break;
+      } // switch (p->type.bits.type)
+#   else // __BIG_ENDIAN
+      c->c[i] = *p;
+#   endif // __BIG_ENDIAN
   }
-  attributes->large_communities = c;
+  attributes->extended_communities = c;
 
   return;
 }
@@ -1420,24 +1462,34 @@ char *mrt_extended_communities_to_string (
   uint32_t i;
 
   if (!communities) return NULL;
-  length = 2 + (30 * communities->num);
+  length = 2 + (40 * communities->num);
   s = (char*) malloc(length);
   s[0]=0;
   p = s;
   for (i=0; i < communities->num; i++) {
     switch (communities->c[i].type.bits.type) {
-      case 0: /* two-octect global AS:local */
-        sprintf(p, "%02x%02x:%u:%u ", communities->c[i].type.type,
-          communities->c[i].as.subtype, communities->c[i].as.global,
+      case 0: /* two-octet global AS:local */
+        sprintf(p, "%02xsub%02x,%u:%u ", 
+          (uint32_t) communities->c[i].type.type,
+          (uint32_t) communities->c[i].as.subtype, 
+          (uint32_t) communities->c[i].as.global,
           communities->c[i].as.local);
         break;
       case 1: /* two-octet IP:local */
-        sprintf(p, "%02x%02x:" PRI_IPV4 ":%u ", communities->c[i].type.type,
-          communities->c[i].ip.subtype, 
+        sprintf(p, "%02xsub%02x," PRI_IPV4 ":%u ",
+          (uint32_t) communities->c[i].type.type,
+          (uint32_t)  communities->c[i].ip.subtype, 
           PRI_IPV4_V(communities->c[i].ip.global),
           (uint32_t) communities->c[i].ip.local);
-      default: /* opaque */
-        sprintf(p, "%02x:%lx ", communities->c[i].type.type,
+        break;
+      case 2: /* opaque w/ sub-type */
+        sprintf(p, "%02xsub%02x,%012lx ",
+          (uint32_t) communities->c[i].type.type,
+          (uint32_t)  communities->c[i].opaque.low, 
+          (uint64_t)  communities->c[i].opaque.value);
+        break;
+      default: /* opaque without subtype */
+        sprintf(p, "%02x,%014lx ", communities->c[i].type.type,
           (uint64_t) communities->c[i].one.value);
         break;
     }
@@ -1579,6 +1631,9 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
         break;
       case BGP_LARGE_COMMUNITIES:
         mrt_attribute_large_communities(record, attributes, attribute);
+        break;
+      case BGP_EXTENDED_COMMUNITIES:
+        mrt_attribute_extended_communities(record, attributes, attribute);
         break;
       default:
     };

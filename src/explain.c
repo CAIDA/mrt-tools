@@ -634,6 +634,14 @@ void print_bgp4mp (
       if (options->trace) print_trace_attribute(
         m->attributes->large_communities->attr, options);
     }
+    if (m->attributes->extended_communities) {
+      s = mrt_extended_communities_to_string(
+            m->attributes->extended_communities);
+      printf ("    Extended Communities: %s\n", s);
+      free(s);
+      if (options->trace) print_trace_attribute(
+        m->attributes->extended_communities->attr, options);
+    }
     if (m->attributes->mp_reach_nlri) {
       print_mp_reach_nlri(m->attributes->mp_reach_nlri, bytes_read, options);
     }
@@ -670,6 +678,9 @@ void print_bgp4mp (
           break;
         case BGP_LARGE_COMMUNITIES:
           if (m->attributes->large_communities) print = FALSE;
+          break;
+        case BGP_EXTENDED_COMMUNITIES:
+          if (m->attributes->extended_communities) print = FALSE;
           break;
         case BGP_MED:
           if (m->attributes->med_set) print = FALSE;

@@ -24,11 +24,12 @@ void mrt_sanity_check_test(void) {
   assert(sizeof(struct BGP_ATTRIBUTE_HEADER) == 4);
 
   assert(sizeof(struct BGP_EXTENDED_COMMUNITY) == 8);
-  ec.opaque.high = 0x44;
+  ec.opaque.high = 0xa5;
   ec.one.value = 0x01234567890ABC;
-  assert (ec.type.type == 0x44);
-  assert (ec.type.bits.authority == 0);
-  assert (ec.type.bits.transitive == 1);
+  assert (ec.type.type == 0xa5);
+  assert (ec.type.bits.type == 0x25);
+  assert (ec.type.bits.authority == 1);
+  assert (ec.type.bits.transitive == 0);
   
 
   /* make sure my netmask applier is doing the right thing.

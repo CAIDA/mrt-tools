@@ -371,7 +371,7 @@ struct BGP_COMMUNITIES {
   uint32_t c[];
 };
 
-struct BGP_LARGE_COMMMUNITY {
+struct BGP_LARGE_COMMUNITY {
   uint32_t global;
   uint32_t local1;
   uint32_t local2;
@@ -381,7 +381,7 @@ struct BGP_LARGE_COMMUNITIES {
   uint32_t num;
   uint8_t fault;
   struct BGP_ATTRIBUTE *attr;
-  struct BGP_LARGE_COMMMUNITY c[];
+  struct BGP_LARGE_COMMUNITY c[];
 };
 
 struct BGP_EXTENDED_COMMUNITY_TYPE_BITS {
@@ -394,7 +394,7 @@ struct BGP_EXTENDED_COMMUNITY_TYPE {
   union {
     uint8_t type;
     struct BGP_EXTENDED_COMMUNITY_TYPE_BITS bits;
-  };
+  } __attribute__ ((__packed__));
 } __attribute__ ((__packed__));
 
 
@@ -402,24 +402,30 @@ struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_OPAQUE {
   union {
     uint8_t high;
     struct BGP_EXTENDED_COMMUNITY_TYPE_BITS bits;
-  };
+  } __attribute__ ((__packed__));
   uint8_t low;
-  uint64_t value: 48;
+  union {
+    uint64_t value: 48;
+    uint8_t value_bytes[6];
+  } __attribute__ ((__packed__));
 } __attribute__ ((__packed__));
 
 struct BGP_EXTENDED_COMMUNITY_ONE_OCTET_OPAQUE {
   union {
     uint8_t type;
     struct BGP_EXTENDED_COMMUNITY_TYPE_BITS bits;
-  };
-  uint64_t value: 56;
+  } __attribute__ ((__packed__));
+  union {
+    uint64_t value: 56;
+    uint8_t value_bytes[7];
+  } __attribute__ ((__packed__));
 } __attribute__ ((__packed__));
 
 struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_AS_SPECIFIC {
   union {
     uint8_t high;
     struct BGP_EXTENDED_COMMUNITY_TYPE_BITS bits;
-  };
+  } __attribute__ ((__packed__));
   uint8_t subtype;
   uint16_t global;
   uint32_t local;
@@ -429,7 +435,7 @@ struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_IP {
   union {
     uint8_t high;
     struct BGP_EXTENDED_COMMUNITY_TYPE_BITS bits;
-  };
+  } __attribute__ ((__packed__));
   uint8_t subtype;
   struct ipv4_address global;
   uint16_t local;
@@ -442,7 +448,8 @@ struct BGP_EXTENDED_COMMUNITY {
     struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_OPAQUE opaque;
     struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_AS_SPECIFIC as;
     struct BGP_EXTENDED_COMMUNITY_TWO_OCTET_IP ip;
-  };
+    uint64_t whole;
+  } __attribute__ ((__packed__));
 } __attribute__ ((__packed__));
 
 struct BGP_EXTENDED_COMMUNITIES {
