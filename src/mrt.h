@@ -295,6 +295,8 @@ struct MRT_TRACEBACK {
   uint8_t *error_afterbyte;
     /* Byte after the faulty information, such as a length that causes
      * the buffer to overflow. */
+  uint8_t warning: 1;
+    /* This is a warning, not an error. */
   const char *tip;
     /* Information about the data format at the current level of
      * the deserialization process */

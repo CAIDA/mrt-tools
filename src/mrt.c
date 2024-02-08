@@ -940,6 +940,37 @@ uint32_t mrt_check_as_path_bytes(
   return segments;
 }
 
+uint32_t mrt_check_as_path_2bytes(
+  struct BGP_ATTRIBUTE *attribute
+) {
+/* Check if the attribute contains an AS_PATH using AS numbers of length 2.
+ * If it decodes to exactly the number of bytes in the buffer and
+ * none of the ASes are zero then yes. Otherwise no.
+ */
+  uint8_t *p = attribute->content;
+  struct BGP_AS_PATH_SEGMENT *segment;
+  size_t bytes;
+  uint32_t segments = 0, i;
+  uint16_t *as;
+
+  while (attribute->after - p >= 2) {
+    segment = (struct BGP_AS_PATH_SEGMENT*) p;
+    if ((segment->type != BGP_AS_SET) && (segment->type != BGP_AS_SEQUENCE))
+      return 0;
+    /* make sure none of the 2-byte ASes are zero. */
+    as = (uint16_t*) (p + sizeof(struct BGP_AS_PATH_SEGMENT));
+    for (i=0; i<= (uint32_t) segment->ascount; i++) {
+      if (as[i] == 0) return 0;
+    }
+    bytes = ((size_t) segment->ascount) * 2;
+    p += sizeof(struct BGP_AS_PATH_SEGMENT) + bytes;
+    segments ++;
+  }
+  if (p > attribute->after) return 0;
+
+  return segments;
+}
+
 void mrt_attribute_decodepath4 (
   struct BGP_ATTRIBUTES *attributes
 , uint32_t segments
@@ -1053,7 +1084,7 @@ void mrt_attribute_decodepath (
     /* likely a withdrawal message */
     return;
   }
-  twobytes = mrt_check_as_path_bytes(attributes->attribute_as_path, 2);
+  twobytes = mrt_check_as_path_2bytes(attributes->attribute_as_path);
   if (attributes->attribute_as4_path) {
     /* decode and merge AS_PATH and AS4_PATH */
     fourbytes = mrt_check_as_path_bytes(attributes->attribute_as4_path, 4);
@@ -1153,6 +1184,7 @@ void mrt_attribute_decodepath (
       attributes->attribute_as_path->trace->firstbyte;
     attributes->path->trace->afterbyte = 
       attributes->attribute_as_path->trace->afterbyte;
+    attributes->path->trace->warning = TRUE;
   }
   return;
 }

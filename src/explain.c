@@ -722,6 +722,7 @@ void mrt_print_decode_message (
 ) {
   uint8_t *message;
   struct BGP4MP_MESSAGE *bgp_message;
+  int warnings;
 
   record->seconds = ntohl(record->mrt->timestamp_seconds);
   // length = record->aftermrt - ((uint8_t*) record->mrt);
@@ -808,7 +809,23 @@ void mrt_print_decode_message (
     }
   }
 
-  if (record->numerrors) stats->num_error_records ++;
+  /* Prior stuff only prints errors, not warnings. Go ahead and print
+   * any warnings. */
+  warnings = 0;
+  if (record->numerrors) {
+    int i;
+    for (i=record->numerrors-1; i>=0; i--) {
+      if (record->trace_errors[i]->warning) {
+        fprintf (stdout, "WARNING: %s\n  in MRT record at file position %lu\n",
+          record->trace_errors[i]->error, (long unsigned int) bytes_read + 1);
+        print_trace_information (stdout, record->trace_errors[i], 
+          !options->quiet, record->trace_errors[i]->tip);
+        warnings++;
+      }
+    }
+  } 
+  if (record->numerrors && ((record->numerrors - warnings)>0))
+    stats->num_error_records ++;
   return ;
 }
 
