@@ -2,4 +2,5 @@
 src/bgp-explain
 test/misalignment
 test/mrt-header
+test/shift
 *.swp

@@ -216,6 +216,12 @@ struct BGP_MP_REACH_HEADER { /* MP_REACH_NLRI attribute */
   /* uint8_t nlri[]; */
 } __attribute__ ((__packed__));
 
+/* https://datatracker.ietf.org/doc/html/rfc4760#section-4 */
+struct BGP_MP_UNREACH_HEADER { /* MP_REACH_NLRI attribute */
+  uint16_t address_family;           /* ipv4 / ipv6 */
+  uint8_t subsequent_address_family; /* unicast / multicast */
+  /* uint8_t nlri[]; */
+} __attribute__ ((__packed__));
 
 struct BGP_UPDATE_MESSAGE {
   /* https://datatracker.ietf.org/doc/html/rfc4271#section-4.1 */
@@ -339,6 +345,14 @@ struct BGP_MP_REACH { /* decoded MP_REACH_NLRI attribute */
   struct NLRI_LIST l;
 };
 
+struct BGP_MP_UNREACH {
+  struct BGP_MP_UNREACH_HEADER *header;
+  struct BGP_ATTRIBUTE *attribute;
+  uint16_t address_family;
+  uint8_t safi; /* unicast/multicast */
+  struct NLRI_LIST l;
+};
+
 struct BGP_ATTRIBUTE {
   struct BGP_ATTRIBUTE_HEADER *header;
   uint8_t *content; /* after header, NULL if the header is short */
@@ -348,6 +362,7 @@ struct BGP_ATTRIBUTE {
   struct MRT_TRACEBACK *trace;
   union {
     struct BGP_MP_REACH *mp_reach_nlri;
+    struct BGP_MP_UNREACH *mp_unreach_nlri;
     void *unknown;
   };
 };
@@ -478,6 +493,7 @@ struct BGP_ATTRIBUTES {
   uint32_t med;
   uint32_t local_pref;
   struct BGP_MP_REACH *mp_reach_nlri;
+  struct BGP_MP_UNREACH *mp_unreach_nlri;
   struct BGP_AS_PATH *path;
   struct BGP_COMMUNITIES *communities;
   struct BGP_LARGE_COMMUNITIES *large_communities;

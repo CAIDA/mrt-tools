@@ -338,6 +338,105 @@ void mrt_attribute_atomic_aggregate (
   return;
 }
 
+static const char *mrt_mp_unreach_information =
+"https://datatracker.ietf.org/doc/html/rfc4760#section-4\n"
+"[uint16 address family][uint8 SAFI (unicast/multicast)]\n"
+"[nlri information until the end of the buffer]\n"
+"NLRI: https://datatracker.ietf.org/doc/html/rfc4271#section-4.3\n"
+"Network Layer Reachability Information\n"
+"[uint8 prefix length][0 or more bytes, minimum needed for the prefix len]\n"
+"e.g. /0 needs 0 bytes, /60 needs 8, /128 needs 16.";
+
+void mrt_attribute_mp_unreach_nlri (
+  struct MRT_RECORD *record
+, struct BGP_ATTRIBUTES *attributes
+, struct BGP_ATTRIBUTE *attribute
+) {
+  char error[100];
+  struct BGP_MP_UNREACH_HEADER *h;
+  size_t minsize;
+  uint8_t badflag = FALSE;
+  struct BGP_MP_UNREACH *unreach;
+
+  if (attributes->mp_unreach_nlri) {
+    snprintf(error, 99, "duplicate MP_UNREACH_NLRI attribute");
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_attribute_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->after;
+    attribute->trace->error_firstbyte = &(attribute->header->type);
+    attribute->trace->error_afterbyte = attribute->trace->error_firstbyte + 1;
+    attribute->fault = TRUE;
+    return;
+  }
+  minsize = sizeof(struct BGP_MP_UNREACH_HEADER);
+  h = (struct BGP_MP_UNREACH_HEADER*) attribute->content;
+  if ((attribute->after - attribute->content) < minsize) badflag=TRUE;
+  if (badflag) {
+    snprintf(error, 99,
+        "short MP_UNREACH_NRLI attribute %u bytes of minimum %u",
+        (unsigned int) (attribute->after - attribute->content),
+        (unsigned int) minsize);
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_mp_unreach_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->after;
+    attribute->trace->error_firstbyte = &(attribute->header->length8);
+    attribute->trace->error_afterbyte = attribute->content;
+    attribute->trace->overflow_firstbyte = attribute->after;
+    attribute->trace->overflow_afterbyte = attribute->content + minsize;
+    attribute->fault = TRUE;
+    return ;
+  }
+  switch (h->address_family) {
+    case BGP4MP_AFI_IPV4:
+    case BGP4MP_AFI_IPV6:
+      break;
+    default:
+      snprintf(error, 99, "MP_UNREACH_NLRI address family %x unknown",
+        ntohl(h->address_family));
+      error[99]=0;
+      attribute->trace =
+        newtraceback(record, error, mrt_attribute_information);
+      attribute->trace->firstbyte = (uint8_t*) attribute->header;
+      attribute->trace->afterbyte = attribute->after;
+      attribute->trace->error_firstbyte = (uint8_t*) &(h->address_family);
+      attribute->trace->error_afterbyte = attribute->trace->error_firstbyte+2;
+      attribute->fault = TRUE;
+      return;
+  };
+  /* malloc a buffer for BGP_MP_REACH and populate the reach->l structure
+   * with the decoded and traced NRLI information */
+  unreach = (struct BGP_MP_UNREACH*) mrt_nlri_deserialize (record,
+    attribute->content + minsize, attribute->after,
+    &(attribute->header->length16), h->address_family, TRUE,
+    ((uint8_t*) &(unreach->l)) - ((uint8_t*) unreach));
+    /* note that "&(unreach->l) - unreach)" is just math calculating the
+     * offset of unreach->l within an unreach structure. It is not a pointer,
+     * so does not depend on unreach already having a value */
+  if (unreach->l.faults) {
+    snprintf(error, 99, "MP_UNREACH_NRLI decode fault: %s",
+        (unreach->l.error)?unreach->l.error->error:"");
+    error[99]=0;
+    attribute->trace =
+      newtraceback(record, error, mrt_mp_unreach_information);
+    attribute->trace->firstbyte = (uint8_t*) attribute->header;
+    attribute->trace->afterbyte = attribute->after;
+    attribute->trace->error_firstbyte = attribute->content + minsize;
+    attribute->trace->error_afterbyte = attribute->after;
+    attribute->fault = TRUE;
+  }
+  unreach->header = h;
+  unreach->attribute = attribute;
+  unreach->address_family = h->address_family;
+  unreach->safi = h->subsequent_address_family;
+  attribute->mp_unreach_nlri = unreach;
+  attributes->mp_unreach_nlri = unreach;
+  return ;
+}
+
 static const char *mrt_mp_reach_information =
 "https://datatracker.ietf.org/doc/html/rfc4760#section-3\n"
 "[uint16 address family][uint8 SAFI (unicast/multicast)]\n"
@@ -377,6 +476,9 @@ void mrt_attribute_mp_reach_nlri (
   if ((attribute->after - attribute->content) < minsize) badflag=TRUE;
   else {
     minsize = sizeof(struct BGP_MP_REACH_HEADER) + h->next_hop_len + 1;
+    /* this is the actual minsized used later if badflag=false
+     * size before next hop, plus variable size next hop plus reserved octet
+     */
     if ((attribute->after - attribute->content) < minsize) badflag=TRUE;
   }
   if (badflag) {
@@ -437,6 +539,9 @@ void mrt_attribute_mp_reach_nlri (
     attribute->content + minsize, attribute->after,
     &(attribute->header->length16), h->address_family, TRUE,
     ((uint8_t*) &(reach->l)) - ((uint8_t*) reach));
+    /* note that "&(reach->l) - reach)" is just math calculating the offset
+     * of reach->l within a reach structure. It is not a pointer, so does
+     * not depend on reach already having a value */
   if (reach->l.faults) {
     snprintf(error, 99, "MP_REACH_NRLI decode fault: %s",
         (reach->l.error)?reach->l.error->error:"");
@@ -1658,6 +1763,9 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
       case BGP_MP_REACH_NLRI:
         mrt_attribute_mp_reach_nlri(record, attributes, attribute);
         break;
+      case BGP_MP_UNREACH_NLRI:
+        mrt_attribute_mp_unreach_nlri(record, attributes, attribute);
+        break;
       case BGP_COMMUNITIES:
         mrt_attribute_communities(record, attributes, attribute);
         break;
@@ -1926,6 +2034,7 @@ void mrt_free_attributes(struct BGP_ATTRIBUTES *attributes)
     switch (attributes->attr[i].type) {
       /* type-specific free operations */
       case BGP_MP_REACH_NLRI:
+      case BGP_MP_UNREACH_NLRI:
         break; /* freed below with mrt_free_nlri() */
       default: /* simple free */
         if (attributes->attr[i].unknown)
@@ -1935,6 +2044,10 @@ void mrt_free_attributes(struct BGP_ATTRIBUTES *attributes)
   if (attributes->mp_reach_nlri) {
     mrt_free_nlri(&(attributes->mp_reach_nlri->l), TRUE);
     free(attributes->mp_reach_nlri);
+  }
+  if (attributes->mp_unreach_nlri) {
+    mrt_free_nlri(&(attributes->mp_unreach_nlri->l), TRUE);
+    free(attributes->mp_unreach_nlri);
   }
   if (attributes->trace) free(attributes->trace);
   free(attributes);

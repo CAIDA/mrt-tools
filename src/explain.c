@@ -489,6 +489,39 @@ void print_rib_ipv4_unicast (
   free_rib_ipv4_unicast(rib);
 }
 
+void print_trace_attribute (
+  struct BGP_ATTRIBUTE *a
+, const struct OPTIONS *options
+) {
+  if (!a) return;
+  print_trace_information (stdout, a->trace,
+    options->explain && a->trace->tip, a->trace->tip);
+  return;
+}
+
+void print_mp_unreach_nlri (
+  struct BGP_MP_UNREACH *unreach
+, uint64_t bytes_read
+, const struct OPTIONS *options
+) {
+  printf ("    MP_UNREACH_NLRI: IPv%s %scast(%u)\n", 
+    (unreach->address_family == BGP4MP_AFI_IPV4)?"4":"6",
+    (unreach->safi == BGP_SAFI_MULTICAST)?"Multi":
+     ((unreach->safi == BGP_SAFI_UNICAST)?"Uni":"ERROR"),
+    (unsigned int) unreach->safi );
+  if (options->trace && !unreach->attribute->fault) {
+    print_trace_attribute(unreach->attribute, options);
+  }
+  (void) print_nlri_list("      Prefix: ", &(unreach->l),
+    bytes_read, options);
+  if (unreach->attribute->fault && (unreach->attribute->trace)) {
+    fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
+      unreach->attribute->trace->error, (long unsigned int) bytes_read + 1);
+    print_trace_information (stdout, unreach->attribute->trace,
+      unreach->attribute->trace->tip!=NULL, unreach->attribute->trace->tip);
+  }
+}
+
 void print_mp_reach_nlri (
   struct BGP_MP_REACH *reach
 , uint64_t bytes_read
@@ -508,6 +541,9 @@ void print_mp_reach_nlri (
   } else { /* BGP4MP_AFI_IPV4 */
     printf("      Next Hop: " PRI_IPV4 "\n", PRI_IPV4_V(reach->next_hop));
   }
+  if (options->trace && !reach->attribute->fault) {
+    print_trace_attribute(reach->attribute, options);
+  }
   (void) print_nlri_list("      Prefix: ", &(reach->l), bytes_read, options);
   if (reach->attribute->fault && (reach->attribute->trace)) {
     fprintf (stdout, "ERROR: %s\n  in MRT record at file position %lu\n",
@@ -515,16 +551,6 @@ void print_mp_reach_nlri (
     print_trace_information (stdout, reach->attribute->trace,
       reach->attribute->trace->tip!=NULL, reach->attribute->trace->tip);
   }
-}
-
-void print_trace_attribute (
-  struct BGP_ATTRIBUTE *a
-, const struct OPTIONS *options
-) {
-  if (!a) return;
-  print_trace_information (stdout, a->trace,
-    options->explain && a->trace->tip, a->trace->tip);
-  return;
 }
 
 void print_bgp4mp (
@@ -645,6 +671,10 @@ void print_bgp4mp (
     if (m->attributes->mp_reach_nlri) {
       print_mp_reach_nlri(m->attributes->mp_reach_nlri, bytes_read, options);
     }
+    if (m->attributes->mp_unreach_nlri) {
+      print_mp_unreach_nlri(m->attributes->mp_unreach_nlri,
+        bytes_read, options);
+    }
     for (i=0; i < m->attributes->numattributes; i++) {
       a = &(m->attributes->attr[i]);
       print = TRUE;
@@ -667,6 +697,9 @@ void print_bgp4mp (
           break;
         case BGP_MP_REACH_NLRI:
           if (m->attributes->mp_reach_nlri) print = FALSE;
+          break;
+        case BGP_MP_UNREACH_NLRI:
+          if (m->attributes->mp_unreach_nlri) print = FALSE;
           break;
         case BGP_AS_PATH:
         case BGP_AS4_PATH:
