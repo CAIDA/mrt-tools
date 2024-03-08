@@ -719,6 +719,7 @@ void print_bgp4mp (
           if (m->attributes->med_set) print = FALSE;
           break;
         default:
+          break;
       };
       if (print) {
         printf ("    undecoded attribute %u flags 0x%x length %u\n",

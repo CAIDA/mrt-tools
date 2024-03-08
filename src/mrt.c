@@ -458,6 +458,8 @@ void mrt_attribute_mp_reach_nlri (
   size_t minsize;
   uint8_t badflag = FALSE;
   struct BGP_MP_REACH *reach;
+  struct ipv4_address *ip4;
+  struct ipv6_address *ip6;
 
   if (attributes->mp_reach_nlri) {
     snprintf(error, 99, "duplicate MP_REACH_NLRI attribute");
@@ -560,14 +562,19 @@ void mrt_attribute_mp_reach_nlri (
   reach->safi = h->subsequent_address_family;
   switch (h->address_family) {
     case BGP4MP_AFI_IPV4:
-      reach->next_hop = *((struct ipv4_address*) (h->next_hop));
+      ip4 = (struct ipv4_address*) (h->next_hop);
+      reach->next_hop = *ip4;
       break;
     case BGP4MP_AFI_IPV6:
-      reach->global_next_hop = *((struct ipv6_address*) (h->next_hop));
-      if (h->next_hop_len == 32)
-        reach->local_next_hop = *((struct ipv6_address*) (h->next_hop + 16));
+      ip6 = (struct ipv6_address*) (h->next_hop);
+      reach->global_next_hop = *ip6;
+      if (h->next_hop_len == 32) {
+        ip6 = (struct ipv6_address*) (h->next_hop + 16);
+        reach->local_next_hop = *ip6;
+      }
       break;
     default: /* unreachable */
+      break;
   }
   attribute->mp_reach_nlri = reach;
   attributes->mp_reach_nlri = reach;
@@ -1776,6 +1783,7 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
         mrt_attribute_extended_communities(record, attributes, attribute);
         break;
       default:
+        break;
     };
     p = attribute->after;
     if (! attribute->trace) {
@@ -1939,6 +1947,7 @@ uint8_t *mrt_nlri_consume_one (
       }     
       break;
     default: /* not reachable */
+      break;
   }
 
   if (!nlri->trace) {
@@ -2358,6 +2367,7 @@ uint8_t *mrt_extended_header_process(struct MRT_RECORD *record)
     default:
       /* regular header (not extended) */
       /* keep the data set prior to the switch() */
+      break;
   };
   return record->mrt_message;
 }
