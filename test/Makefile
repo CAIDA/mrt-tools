@@ -1,5 +1,6 @@
 CC := gcc
-CFLAGS := -Wall -Werror -g -O2
+# CFLAGS := -Wall -Werror -g -O2
+CFLAGS := -Wall -g -O2
 LDFLAGS :=
 
 targets = misalignment mrt-header

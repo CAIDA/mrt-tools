@@ -49,5 +49,6 @@ void mrt_sanity_check_test(void) {
 int main(void) {
   mrt_sanity_check_test();
   printf ("OK: mrt header sanity checks pass\n");
+  return 0;
 }
 
