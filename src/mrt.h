@@ -342,6 +342,7 @@ struct NLRI { /* "Network Layer Reachability Information" */
   union {
     struct ipv4_address ipv4;
     struct ipv6_address ipv6;
+    uint8_t bytes[16];
   };
 };
 
@@ -407,7 +408,7 @@ struct BGP_COMMUNITIES {
   uint32_t num;
   uint8_t fault;
   struct BGP_ATTRIBUTE *attr;
-  uint32_t c[];
+  uint32_t c[]; // host byte order
 };
 
 struct BGP_LARGE_COMMUNITY {
@@ -420,7 +421,7 @@ struct BGP_LARGE_COMMUNITIES {
   uint32_t num;
   uint8_t fault;
   struct BGP_ATTRIBUTE *attr;
-  struct BGP_LARGE_COMMUNITY c[];
+  struct BGP_LARGE_COMMUNITY c[]; // host byte order
 };
 
 struct BGP_EXTENDED_COMMUNITY_TYPE_BITS {
@@ -562,7 +563,7 @@ struct BGP4MP_MESSAGE {
   uint8_t *nlri_afterbyte;
   struct NLRI_LIST *withdrawals;
   struct NLRI_LIST *nlri;
-  struct BGP_ATTRIBUTES *attributes;
+  struct BGP_ATTRIBUTES *attributes; // host byte order
   uint8_t as2_message_format; // see as2_message_format_flag below
 };
 
@@ -667,6 +668,8 @@ struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
 
 void mrt_free_bgp4mp_message (struct BGP4MP_MESSAGE *m);
 
+void sort_communities(struct BGP_COMMUNITIES *com);
+void sort_large_communities (struct BGP_LARGE_COMMUNITIES *com);
 
 
 #pragma GCC diagnostic ignored "-Waddress-of-packed-member"

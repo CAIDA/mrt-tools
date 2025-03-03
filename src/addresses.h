@@ -25,7 +25,7 @@ struct ipv6_address {
             uint64_t upper;
             uint64_t lower;
         };
-        __uint128_t whole;
+        __uint128_t whole; /* Beware: network byte order */
     };
 } __attribute__ ((__packed__));
 
@@ -76,7 +76,7 @@ struct ipv6_header {
 struct ipv4_address {
     union {
         uint8_t ad[4];
-        uint32_t whole;
+        uint32_t whole; /* Beware: network byte order */
     };
 } __attribute__ ((__packed__));
 

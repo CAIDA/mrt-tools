@@ -647,6 +647,7 @@ void print_bgp4mp (
         m->attributes->path->attr, options);
     }
     if (m->attributes->communities) {
+      sort_communities(m->attributes->communities);
       s = mrt_communities_to_string(m->attributes->communities);
       printf ("    Communities: %s\n", s);
       free(s);
@@ -654,6 +655,7 @@ void print_bgp4mp (
         m->attributes->communities->attr, options);
     }
     if (m->attributes->large_communities) {
+      sort_large_communities(m->attributes->large_communities);
       s = mrt_large_communities_to_string(m->attributes->large_communities);
       printf ("    Large Communities: %s\n", s);
       free(s);

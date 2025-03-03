@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <assert.h>
+#include "msort.h"
 
 const uint8_t BGP_MESSAGE_MARKER[16] =
   { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
@@ -268,6 +269,236 @@ struct ipv6_address ipv6_apply_netmask (
   ip.lower &= htonll(lower_netmask);
   return ip;
 }
+
+/* sorting routines */
+
+const char debug_compare_chars[] = "0123456789abcdef";
+void debug_compare_bytes (void *a, void *b, size_t bytes, const char *s) {
+  int r;
+  size_t i;
+  uint8_t *aa, *bb;
+
+  r = memcmp(a, b, bytes);
+  if (r==0) return;
+  printf ("Bytes from %s differ (%d)\n", s, r);
+  aa = (uint8_t*) a;
+  bb = (uint8_t*) b;
+  printf ("  ");
+  for (i=0; i<bytes; i++) {
+    printf ("%c%c ", debug_compare_chars[aa[i]>>4], 
+      debug_compare_chars[aa[i] & 0xf]);
+  }
+  printf ("\n  ");
+  for (i=0; i<bytes; i++) {
+    printf ("%c%c ", debug_compare_chars[bb[i]>>4], 
+      debug_compare_chars[bb[i] & 0xf]);
+  }
+  printf ("\n");
+  return;
+}
+
+static int compare_attributes(void *first, void *second) {
+  struct BGP_ATTRIBUTE *a = (struct BGP_ATTRIBUTE*) first;
+  struct BGP_ATTRIBUTE *b = (struct BGP_ATTRIBUTE*) second;
+  // type is an 8-bit integer
+  return (a->type <= b->type);
+}
+
+void sort_attributes (struct BGP_ATTRIBUTES *attrs) {
+/* Warning: this must be called before decoding the BGP attributes because
+ * it will change their location in memory rendering any pointers invalid.
+ * This won't work until we change mrt_extract_attributes() so it doesn't
+ * decode the attributes while it extracts them.
+ */
+  struct BGP_ATTRIBUTE **attrpointers, *attr;
+  int i;
+
+  attrpointers = (struct BGP_ATTRIBUTE **) malloc (
+    sizeof (struct BGP_ATTRIBUTE *) * attrs->numattributes);
+  for (i=0; i<attrs->numattributes; i++) 
+    attrpointers[i] = attrs->attr + i;
+  (void) mergesort((void**) attrpointers, attrs->numattributes,
+    compare_attributes);
+  attr = (struct BGP_ATTRIBUTE *) malloc (
+    sizeof(struct BGP_ATTRIBUTE) * attrs->numattributes);
+  for (i=0; i<attrs->numattributes; i++) 
+    attr[i] = *(attrpointers[i]);
+  memcpy (attrs->attr, attr, 
+    sizeof(struct BGP_ATTRIBUTE) * attrs->numattributes);
+  free(attr);
+  free(attrpointers);
+  return;
+}
+
+static int compare_communities(void *first, void *second) {
+  // from struct BGP_COMMUNITIES where they are in host byte order
+  uint32_t *a = (uint32_t *) first;
+  uint32_t *b = (uint32_t *) second;
+  return (*a <= *b);
+}
+
+void sort_communities(struct BGP_COMMUNITIES *com) {
+  uint32_t **cm_pointers, *cm;
+  int i;
+  
+  cm_pointers = (uint32_t **) malloc ( sizeof (uint32_t*) * com->num);
+  for (i=0; i<com->num; i++) cm_pointers[i] = com->c + i;
+  (void) mergesort((void**) cm_pointers, com->num, compare_communities);
+  cm = (uint32_t *) malloc ( sizeof(uint32_t) * com->num);
+  for (i=0; i<com->num; i++) cm[i] = *(cm_pointers[i]);
+  debug_compare_bytes (com->c, cm, sizeof(uint32_t) * com->num,
+    "DEBUG communities");
+  memcpy (com->c, cm, sizeof(uint32_t) * com->num);
+  free(cm);
+  free(cm_pointers);
+  return;
+}
+
+static int compare_large_communities(void *first, void *second) {
+  struct BGP_LARGE_COMMUNITY *a = (struct BGP_LARGE_COMMUNITY*) first;
+  struct BGP_LARGE_COMMUNITY *b = (struct BGP_LARGE_COMMUNITY*) second;
+  // struct BGP_LARGE_COMMUNITY uses host byte order
+  if (a->global != b->global) return (a->global < b->global);
+  if (a->local1 != b->local1) return (a->local1 < b->local1);
+  return (a->local2 <= b->local2);
+}
+
+void sort_large_communities (struct BGP_LARGE_COMMUNITIES *com) {
+  struct BGP_LARGE_COMMUNITY **cm_pointers, *cm;
+  int i;
+
+  cm_pointers = (struct BGP_LARGE_COMMUNITY **) malloc (
+    sizeof (struct BGP_LARGE_COMMUNITY *) * com->num);
+  for (i=0; i<com->num; i++) cm_pointers[i] = (com->c) + i;
+  (void) mergesort((void**) cm_pointers, com->num,
+           compare_large_communities);
+  cm = (struct BGP_LARGE_COMMUNITY *) malloc (
+    sizeof(struct BGP_LARGE_COMMUNITY) * com->num);
+  for (i=0; i<com->num; i++) 
+    cm[i] = *(cm_pointers[i]);
+  debug_compare_bytes (com->c, cm,
+    sizeof(struct BGP_LARGE_COMMUNITY) * com->num, "DEBUG large communities");
+  memcpy (com->c, cm, sizeof(struct BGP_LARGE_COMMUNITY) * com->num);
+  free(cm);
+  free(cm_pointers);
+  return;
+}
+
+uint64_t ntoh64 (uint64_t input) {
+// Network to host byte order for 64-bit integers
+  uint32_t *two_words = (uint32_t*) (&input);
+  uint32_t work[2];
+  uint64_t *output = (uint64_t*) (&work);
+
+# if __BYTE_ORDER == __LITTLE_ENDIAN
+  work[0]=ntohl(two_words[1]);
+  work[1]=ntohl(two_words[0]);
+  return *output;
+# else // __BIG_ENDIAN
+  return input
+# endif // __BIG_ENDIAN
+}
+
+static int compare_extended_communities(void *first, void *second) {
+  struct BGP_EXTENDED_COMMUNITY *a = (struct BGP_EXTENDED_COMMUNITY*) first;
+  struct BGP_EXTENDED_COMMUNITY *b = (struct BGP_EXTENDED_COMMUNITY*) second;
+
+  if (a->type.bits.type != b->type.bits.type) 
+    return (a->type.bits.type <= b->type.bits.type);
+  switch (a->type.bits.type) {
+    case 0: /* two-octet global AS:local */
+      if (a->as.global != b->as.global) return (a->as.global < b->as.global);
+      return (a->as.local <= b->as.local);
+    case 1: /* two-octet IP:local */
+      if (a->ip.global.whole != b->ip.global.whole)
+        return (ntohl(a->ip.global.whole) < ntohl(b->ip.global.whole));
+      return (a->ip.local <= b->ip.local);
+    case 2: /* opaque w/ sub-type */
+      return (a->opaque.value <= b->opaque.value);
+    default: /* opaque */
+      return (a->one.value <= b->one.value);
+  }
+}
+
+void sort_extended_communities (struct BGP_EXTENDED_COMMUNITIES *com) {
+  struct BGP_EXTENDED_COMMUNITY **cm_pointers, *cm;
+  int i;
+
+  cm_pointers = (struct BGP_EXTENDED_COMMUNITY **) malloc (
+    sizeof (struct BGP_EXTENDED_COMMUNITY *) * com->num);
+  for (i=0; i<com->num; i++) cm_pointers[i] = (com->c) + i;
+  (void) mergesort((void**) cm_pointers, com->num,
+           compare_extended_communities);
+  cm = (struct BGP_EXTENDED_COMMUNITY *) malloc (
+    sizeof(struct BGP_EXTENDED_COMMUNITY) * com->num);
+  for (i=0; i<com->num; i++) 
+    cm[i] = *(cm_pointers[i]);
+  memcpy (com->c, cm, sizeof(struct BGP_EXTENDED_COMMUNITY) * com->num);
+  free(cm);
+  free(cm_pointers);
+  return;
+}
+
+static int compare_nlri(void *first, void *second) {
+  struct NLRI *a = (struct NLRI*) first;
+  struct NLRI *b = (struct NLRI*) second;
+  uint64_t aa, bb;
+
+  if (a->address_family != b->address_family)
+    return (a->address_family < b->address_family);
+  switch (a->address_family) {
+    case BGP4MP_AFI_IPV4:
+      if (a->ipv4.whole == b->ipv4.whole) 
+        // Least specific prefix first. See note below.
+        return (a->prefix_len <= b->prefix_len);
+      return (ntohl(a->ipv4.whole) <= ntohl(b->ipv4.whole));
+    case BGP4MP_AFI_IPV6:
+      if ((a->ipv6.network == b->ipv6.network) &&
+          (a->ipv6.host == b->ipv6.host)) {
+        // Least specific prefix first. See note below.
+        return (a->prefix_len <= b->prefix_len);
+      }
+      if (a->ipv6.network != b->ipv6.network) {
+        aa=ntoh64(a->ipv6.network);
+        bb=ntoh64(b->ipv6.network);
+        return (aa < bb);
+      }
+      aa=ntoh64(a->ipv6.host);
+      bb=ntoh64(b->ipv6.host);
+      return (aa <= bb);
+    default:
+      return TRUE; // this is an error, so don't change the sort order
+  }
+  /* Not sure the most-specific prefix logic here is reasonable.
+   * Not really possible to sort most specific routes within a covering
+   * route first using an array structure. Would need a tree for that.
+   * Least specific prefix is sensible from a human perspective but the
+   * opposite of what's needed by a router. If I put the most specific
+   * prefixes first regardless of the address, it'll make sense to a router
+   * but not a human.
+   */
+}
+
+void sort_nlri (struct NLRI_LIST *nlris) {
+  struct NLRI **nlri_pointers, *prefixes;
+  int i;
+
+  nlri_pointers = (struct NLRI **) malloc (
+    sizeof (struct NLRI *) * nlris->num_nlri);
+  for (i=0; i<nlris->num_nlri; i++) nlri_pointers[i] = (nlris->prefixes) + i;
+  (void) mergesort((void**) nlri_pointers, nlris->num_nlri,
+           compare_nlri);
+  prefixes = (struct NLRI *) malloc (sizeof(struct NLRI) * nlris->num_nlri);
+  for (i=0; i<nlris->num_nlri; i++) 
+    prefixes[i] = *(nlri_pointers[i]);
+  memcpy (nlris->prefixes, prefixes, sizeof(struct NLRI) * nlris->num_nlri);
+  free(prefixes);
+  free(nlri_pointers);
+  return;
+}
+
+
+/* end sorting routines */
 
 int mrt_count_attributes (
   uint8_t *p
@@ -1873,10 +2104,10 @@ uint8_t *mrt_nlri_consume_one (
   }
   /* sanity-check prefix length */
   switch (address_family) {
-    case BGP4MP_AFI_IPV4:
-      if (nlri->prefix_len <= 32) break;
     case BGP4MP_AFI_IPV6:
       if (nlri->prefix_len <= 128) break;
+    case BGP4MP_AFI_IPV4:
+      if (nlri->prefix_len <= 32) break;
       /* insane netmask */
       nlri->fault_flag = TRUE;
       snprintf (error, 199,
