@@ -1,5 +1,6 @@
 *.o
 src/bgp-explain
+src/msort-test
 test/misalignment
 test/mrt-header
 test/shift
@@ -9,3 +10,9 @@ debian/debhelper-build-stamp
 debian/files
 debian/mrt-tools.substvars
 debian/mrt-tools
+rpm/BUILD
+rpm/RPMS
+rpm/BUILDROOT
+rpm/SOURCES
+rpm/SPECS
+rpm/SRPMS

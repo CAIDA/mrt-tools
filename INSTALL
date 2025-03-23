@@ -1,0 +1,17 @@
+Unpackaged:
+
+make
+sudo make install
+
+
+Debian/Ubuntu:
+
+make debian
+sudo dpkg -i ../mrt-tools_VERSION.deb
+
+
+Red Hat / RPM:
+
+make rpm
+sudo rpm -i rpm/RPMS/*/mrt-tools-VERSION.rpm
+
