@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: natp-ssh
+Upstream-Contact: ark-info@caida.org
+Source: https://www.caida.org/projects/ark/
+
+Files: *
+Copyright: 2015-2022 The Regents of the University of California.
+License: UNKNOWN

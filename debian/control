@@ -1,0 +1,13 @@
+Source: mrt-tools
+Section: net
+Priority: optional
+Maintainer: William Herrin <herrin@caida.org>
+Build-Depends: debhelper-compat (= 12), make
+Standards-Version: 4.4.1
+Homepage: https://www.caida.org/
+
+Package: mrt-tools
+Architecture: any
+Depends: ${misc:Depends}
+Description: Tools for working with BGP MRT data files
+  currently includes bgp-explain

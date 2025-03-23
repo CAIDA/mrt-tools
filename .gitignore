@@ -4,3 +4,8 @@ test/misalignment
 test/mrt-header
 test/shift
 *.swp
+debian/.debhelper
+debian/debhelper-build-stamp
+debian/files
+debian/mrt-tools.substvars
+debian/mrt-tools
