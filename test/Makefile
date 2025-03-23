@@ -11,7 +11,7 @@ misalignment: misalignment.o
 	$(CC) -o $@ $(LDFLAGS) misalignment.o
 
 mrt-header: mrt-header.o
-	$(CC) -o $@ $(LDFLAGS) mrt-header.o ../src/mrt.o
+	$(CC) -o $@ $(LDFLAGS) mrt-header.o ../src/mrt.o ../src/msort.o
 
 clean:
 	rm -f *.o
