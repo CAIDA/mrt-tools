@@ -6,14 +6,22 @@ targets = bgp-explain msort-test
 
 all: $(targets)
 
+include Makefile.depend
+
+depend:
+	./makedepend.sh
+
 bgp-explain: explain.o mrt.o msort.o
 	$(CC) -o $@ $(LDFLAGS) explain.o mrt.o msort.o
 
 msort-test: msort.o msort-test.o
 	$(CC) -o $@ $(LDFLAGS) msort.o msort-test.o
 
-serialize: mrt.o serialize.o temp.o msort.o
-	$(CC) -o $@ $(LDFLAGS) temp.o mrt.o msort.o serialize.o
+#compresspoc: mrt.o serialize.o compresspoc.o msort.o
+#	$(CC) -o $@ $(LDFLAGS) compresspoc.o mrt.o msort.o serialize.o
+
+compresspoc2: mrt.o serialize.o compresspoc.o msort.o dedupehash.o
+	$(CC) -o $@ $(LDFLAGS) compresspoc.o mrt.o msort.o serialize.o dedupehash.o
 
 clean:
 	rm -f *.o
@@ -21,8 +29,4 @@ clean:
 
 .c.o:
 	$(CC) -c $(CFLAGS) $<
-
-# dependencies
-explain.o: explain.c mrt.h addresses.h
-mrt.o: mrt.c mrt.h addresses.h
 

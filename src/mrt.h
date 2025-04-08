@@ -19,11 +19,6 @@
  * https://datatracker.ietf.org/doc/html/rfc6396
  */
 
-enum TRUEORFALSE {
-  FALSE = 0,
-  TRUE = 1
-};
-
 /* Integers in the MRT file are in big endian (network) byte order. 
  * This software is likely used on a little endian machine such as
  * intel x86, so we have to use ntohs() and ntohl() to change the integers

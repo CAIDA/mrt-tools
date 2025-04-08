@@ -1,0 +1,10 @@
+# Automatically added by makedepend after this line
+
+compresspoc.o: mrt.h addresses.h serialize.h dedupehash.h truefalse.h
+dedupehash.o: dedupehash.h truefalse.h
+explain.o: mrt.h addresses.h
+mrt.o: mrt.h addresses.h msort.h truefalse.h
+msort-backup.o: msort.h
+msort-test.o: msort.h
+msort.o: msort.h
+serialize.o: serialize.h mrt.h addresses.h truefalse.h

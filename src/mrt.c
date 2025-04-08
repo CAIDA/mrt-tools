@@ -10,6 +10,7 @@
 #include <string.h>
 #include <assert.h>
 #include "msort.h"
+#include "truefalse.h"
 
 const uint8_t BGP_MESSAGE_MARKER[16] =
   { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
