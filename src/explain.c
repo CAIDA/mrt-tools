@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <argp.h>
+#include "truefalse.h"
 
 const char *argp_program_version = "bgp-explain 1.0";
 struct OPTIONS {
