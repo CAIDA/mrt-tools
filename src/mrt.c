@@ -29,12 +29,12 @@ ssize_t mread(int file, void *buffer, size_t buffersize) {
   totalr = 0;
   while (TRUE) {
     r = read(file, buffer, buffersize);
-    if (r == buffersize) return totalr + r; /* read whole record */
+    if (r == (ssize_t) buffersize) return totalr + r; /* read whole record */
     if (r == 0) return totalr; /* EOF */
     if (r < 0) return r; /* error */
     totalr += r;
     buffer += r;
-    buffersize -= r;
+    buffersize -= (size_t) r;
   }
   return totalr;
 }
@@ -130,7 +130,8 @@ void mrt_print_trace (
   last += (16 - offset);
 
   /* Be somewhat reasonable about allegedly oversized records */
-  if (last - first > mrt_sanity_max_print) last = first + mrt_sanity_max_print;
+  if ((size_t) (last - first) > mrt_sanity_max_print) 
+     last = first + mrt_sanity_max_print;
 
   /* if told to print the whole record, then ignore all that and print the
    * whole record */
@@ -202,8 +203,8 @@ void mrt_free_record (struct MRT_RECORD *mrt)
 static void push_error(struct MRT_RECORD *mrt, struct MRT_TRACEBACK *tr)
 {
   if (mrt->numerrors) {
-    mrt->trace_errors = (struct MRT_TRACEBACK **) realloc(
-      mrt->trace_errors, sizeof(struct MRT_TRACEBACK *) * (mrt->numerrors+1));
+    mrt->trace_errors = (struct MRT_TRACEBACK **) realloc(mrt->trace_errors, 
+      sizeof(struct MRT_TRACEBACK *) * ((size_t) (mrt->numerrors+1)));
   } else {
     mrt->trace_errors = (struct MRT_TRACEBACK **) malloc(
       sizeof(struct MRT_TRACEBACK *));
@@ -315,17 +316,17 @@ void sort_attributes (struct BGP_ATTRIBUTES *attrs) {
   int i;
 
   attrpointers = (struct BGP_ATTRIBUTE **) malloc (
-    sizeof (struct BGP_ATTRIBUTE *) * attrs->numattributes);
+    sizeof (struct BGP_ATTRIBUTE *) * (size_t) attrs->numattributes);
   for (i=0; i<attrs->numattributes; i++) 
     attrpointers[i] = attrs->attr + i;
   (void) mergesort((void**) attrpointers, attrs->numattributes,
     compare_attributes);
   attr = (struct BGP_ATTRIBUTE *) malloc (
-    sizeof(struct BGP_ATTRIBUTE) * attrs->numattributes);
+    sizeof(struct BGP_ATTRIBUTE) * (size_t) attrs->numattributes);
   for (i=0; i<attrs->numattributes; i++) 
     attr[i] = *(attrpointers[i]);
   memcpy (attrs->attr, attr, 
-    sizeof(struct BGP_ATTRIBUTE) * attrs->numattributes);
+    sizeof(struct BGP_ATTRIBUTE) * (size_t) attrs->numattributes);
   free(attr);
   free(attrpointers);
   return;
@@ -340,11 +341,11 @@ static int compare_communities(void *first, void *second) {
 
 void sort_communities(struct BGP_COMMUNITIES *com) {
   uint32_t **cm_pointers, *cm;
-  int i;
+  uint32_t i;
   
   cm_pointers = (uint32_t **) malloc ( sizeof (uint32_t*) * com->num);
   for (i=0; i<com->num; i++) cm_pointers[i] = com->c + i;
-  (void) mergesort((void**) cm_pointers, com->num, compare_communities);
+  (void) mergesort((void**) cm_pointers, (int) com->num, compare_communities);
   cm = (uint32_t *) malloc ( sizeof(uint32_t) * com->num);
   for (i=0; i<com->num; i++) cm[i] = *(cm_pointers[i]);
   debug_compare_bytes (com->c, cm, sizeof(uint32_t) * com->num,
@@ -366,12 +367,12 @@ static int compare_large_communities(void *first, void *second) {
 
 void sort_large_communities (struct BGP_LARGE_COMMUNITIES *com) {
   struct BGP_LARGE_COMMUNITY **cm_pointers, *cm;
-  int i;
+  uint32_t i;
 
   cm_pointers = (struct BGP_LARGE_COMMUNITY **) malloc (
     sizeof (struct BGP_LARGE_COMMUNITY *) * com->num);
   for (i=0; i<com->num; i++) cm_pointers[i] = (com->c) + i;
-  (void) mergesort((void**) cm_pointers, com->num,
+  (void) mergesort((void**) cm_pointers, (int) com->num,
            compare_large_communities);
   cm = (struct BGP_LARGE_COMMUNITY *) malloc (
     sizeof(struct BGP_LARGE_COMMUNITY) * com->num);
@@ -423,12 +424,12 @@ static int compare_extended_communities(void *first, void *second) {
 
 void sort_extended_communities (struct BGP_EXTENDED_COMMUNITIES *com) {
   struct BGP_EXTENDED_COMMUNITY **cm_pointers, *cm;
-  int i;
+  uint32_t i;
 
   cm_pointers = (struct BGP_EXTENDED_COMMUNITY **) malloc (
     sizeof (struct BGP_EXTENDED_COMMUNITY *) * com->num);
   for (i=0; i<com->num; i++) cm_pointers[i] = (com->c) + i;
-  (void) mergesort((void**) cm_pointers, com->num,
+  (void) mergesort((void**) cm_pointers, (int) com->num,
            compare_extended_communities);
   cm = (struct BGP_EXTENDED_COMMUNITY *) malloc (
     sizeof(struct BGP_EXTENDED_COMMUNITY) * com->num);
@@ -485,14 +486,16 @@ void sort_nlri (struct NLRI_LIST *nlris) {
   int i;
 
   nlri_pointers = (struct NLRI **) malloc (
-    sizeof (struct NLRI *) * nlris->num_nlri);
+    sizeof (struct NLRI *) * (size_t) nlris->num_nlri);
   for (i=0; i<nlris->num_nlri; i++) nlri_pointers[i] = (nlris->prefixes) + i;
   (void) mergesort((void**) nlri_pointers, nlris->num_nlri,
            compare_nlri);
-  prefixes = (struct NLRI *) malloc (sizeof(struct NLRI) * nlris->num_nlri);
+  prefixes = (struct NLRI *) malloc (sizeof(struct NLRI) * 
+    (size_t) nlris->num_nlri);
   for (i=0; i<nlris->num_nlri; i++) 
     prefixes[i] = *(nlri_pointers[i]);
-  memcpy (nlris->prefixes, prefixes, sizeof(struct NLRI) * nlris->num_nlri);
+  memcpy (nlris->prefixes, prefixes, sizeof(struct NLRI) * 
+    (size_t) nlris->num_nlri);
   free(prefixes);
   free(nlri_pointers);
   return;
@@ -509,10 +512,11 @@ int mrt_count_attributes (
   struct BGP_ATTRIBUTE_HEADER *attribute;
 
   for (num=0; p < after; num++) {
-    if ((after - p) < (sizeof(struct BGP_ATTRIBUTE_HEADER)-1)) return num+1;
+    if ((size_t) (after - p) < (sizeof(struct BGP_ATTRIBUTE_HEADER)-1))
+      return num+1;
     attribute = (struct BGP_ATTRIBUTE_HEADER*) p;
     if ( (attribute->extended_length) &&
-         ((after - p) < sizeof(struct BGP_ATTRIBUTE_HEADER)) )
+         ((size_t) (after - p) < sizeof(struct BGP_ATTRIBUTE_HEADER)) )
       return num+1;
     if (attribute->extended_length)
       p += sizeof(struct BGP_ATTRIBUTE_HEADER) + ntohs(attribute->length16);
@@ -604,7 +608,7 @@ void mrt_attribute_mp_unreach_nlri (
   }
   minsize = sizeof(struct BGP_MP_UNREACH_HEADER);
   h = (struct BGP_MP_UNREACH_HEADER*) attribute->content;
-  if ((attribute->after - attribute->content) < minsize) badflag=TRUE;
+  if ((size_t) (attribute->after - attribute->content) < minsize) badflag=TRUE;
   if (badflag) {
     snprintf(error, 99,
         "short MP_UNREACH_NRLI attribute %u bytes of minimum %u",
@@ -707,13 +711,13 @@ void mrt_attribute_mp_reach_nlri (
   }
   minsize = sizeof(struct BGP_MP_REACH_HEADER) + 5;
   h = (struct BGP_MP_REACH_HEADER*) attribute->content;
-  if ((attribute->after - attribute->content) < minsize) badflag=TRUE;
+  if ((size_t) (attribute->after - attribute->content) < minsize) badflag=TRUE;
   else {
     minsize = sizeof(struct BGP_MP_REACH_HEADER) + h->next_hop_len + 1;
     /* this is the actual minsized used later if badflag=false
      * size before next hop, plus variable size next hop plus reserved octet
      */
-    if ((attribute->after - attribute->content) < minsize) badflag=TRUE;
+    if ((size_t) (attribute->after - attribute->content) < minsize) badflag=TRUE;
   }
   if (badflag) {
     snprintf(error, 99,
@@ -900,7 +904,7 @@ void mrt_attribute_aggregator2 (
   size_t length;
   uint32_t aggregator_as;
 
-  length = attribute->after - attribute->content;
+  length = (size_t) (attribute->after - attribute->content);
   if ((length != 6) && (length != 8)) {
     snprintf(error, 99,
         "invalid AGGREGATOR attribute length expecting 6 or 8 bytes got %u",
@@ -1591,7 +1595,7 @@ void mrt_attribute_communities (
     attribute->fault = TRUE;
     return ;
   }
-  num = (attribute->after - attribute->content);
+  num = (uint32_t) (attribute->after - attribute->content);
   if ((num % sizeof(uint32_t)) != 0) {
     snprintf(error, 99, "communities are 32 bits each, but %u content "
       "size is not divisible by 4", num);
@@ -1671,7 +1675,7 @@ void mrt_attribute_large_communities (
     attribute->fault = TRUE;
     return ;
   }
-  num = (attribute->after - attribute->content);
+  num = (uint32_t) (attribute->after - attribute->content);
   if ((num % sizeof(struct BGP_LARGE_COMMUNITY)) != 0) {
     snprintf(error, 99, "large communities are 12 bytes each, but %u content "
       "size is not divisible by 12", num);
@@ -1756,7 +1760,7 @@ void mrt_attribute_extended_communities (
     attribute->fault = TRUE;
     return ;
   }
-  num = (attribute->after - attribute->content);
+  num = (uint32_t) (attribute->after - attribute->content);
   if ((num % sizeof(struct BGP_EXTENDED_COMMUNITY)) != 0) {
     snprintf(error, 99, "large communities are %u bytes each, "
       "but %u content size is not divisible by %u", 
@@ -1892,7 +1896,7 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
   struct MRT_RECORD *record
 , uint8_t *firstbyte
 , uint8_t *afterbyte
-, uint16_t address_family
+, uint16_t address_family __attribute__((unused))
 ) {
   uint8_t *lengthsource = firstbyte - 2;
   struct BGP_ATTRIBUTES *attributes;
@@ -1905,7 +1909,7 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
 
   count = mrt_count_attributes(firstbyte, afterbyte);
   structsize = sizeof(struct BGP_ATTRIBUTES) +
-    (sizeof(struct BGP_ATTRIBUTE) * (count + 1));
+    (sizeof(struct BGP_ATTRIBUTE) * (size_t) (count + 1));
   attributes = (struct BGP_ATTRIBUTES*) malloc (structsize);
   assert (attributes != NULL);
   memset (attributes, 0, structsize);
@@ -1915,11 +1919,11 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
     attribute = &(attributes->attr[i]);
     attribute->header = (struct BGP_ATTRIBUTE_HEADER *) p;
     badflag = FALSE;
-    if ((afterbyte - p) < (sizeof(struct BGP_ATTRIBUTE_HEADER)-1))
+    if ((size_t) (afterbyte - p) < (sizeof(struct BGP_ATTRIBUTE_HEADER)-1))
       badflag = TRUE;
     if (!badflag) {
       if ( (attribute->header->extended_length) &&
-         ((afterbyte - p) < sizeof(struct BGP_ATTRIBUTE_HEADER)) )
+         ((size_t) (afterbyte - p) < sizeof(struct BGP_ATTRIBUTE_HEADER)) )
         badflag = TRUE;
     }
     if (badflag) {
@@ -2049,7 +2053,7 @@ struct BGP_ATTRIBUTES *mrt_extract_attributes (
 void mrt_free_path (
   struct BGP_AS_PATH *path
 ) {
-  int i;
+  uint32_t i;
 
   if (!path) return;
   if (path->trace) {
@@ -2073,7 +2077,7 @@ uint8_t *mrt_nlri_consume_one (
 , struct NLRI *nlri
 , uint8_t *firstbyte
 , uint8_t *afterbyte
-, uint16_t *attribute_length
+, uint16_t *attribute_length  // why not used?
 , uint16_t address_family
 ) {
   uint8_t prefix_bytes;
@@ -2084,7 +2088,11 @@ uint8_t *mrt_nlri_consume_one (
   if (firstbyte >= afterbyte) return NULL; /* end of list */
   nlri->address_family = address_family;
   nlri->prefix_len = *((uint8_t*) firstbyte);
-  prefix_bytes = (nlri->prefix_len >> 3) + ((nlri->prefix_len & 0x7)?1:0);
+  // note weird format for prefix_bytes calculation overcomes a GCC
+  // -Wconversion bug
+  // prefix_bytes = (nlri->prefix_len >> 3) + ((nlri->prefix_len & 0x7)?1:0);
+  prefix_bytes = (nlri->prefix_len & 0x7)?1:0;
+  prefix_bytes += (nlri->prefix_len >> 3);
   if ((firstbyte + prefix_bytes + 1) > afterbyte) {
     /* routing prefix would overflow the available buffer */
     nlri->fault_flag = TRUE;
@@ -2223,9 +2231,10 @@ struct NLRI_LIST *mrt_nlri_deserialize (
   uint8_t *buffer;
   size_t bufsize;
 
-  nlri = (struct NLRI*) malloc (sizeof(struct NLRI) * (afterbyte-firstbyte));
+  nlri = (struct NLRI*) malloc (sizeof(struct NLRI) * 
+    (size_t) (afterbyte-firstbyte));
   assert(nlri != NULL);
-  memset(nlri, 0, sizeof(struct NLRI) * (afterbyte-firstbyte));
+  memset(nlri, 0, sizeof(struct NLRI) * (size_t) (afterbyte-firstbyte));
   for (next=firstbyte; next && (next < afterbyte); numnlri++) {
     next = mrt_nlri_consume_one (record, &(nlri[numnlri]), next, afterbyte,
              length, address_family);
@@ -2233,12 +2242,12 @@ struct NLRI_LIST *mrt_nlri_deserialize (
   }
 
   bufsize = prefix_bytes + sizeof(struct NLRI_LIST) +
-    (sizeof(struct NLRI) * numnlri);
+    (sizeof(struct NLRI) * (size_t) numnlri);
   buffer = (uint8_t*) malloc(bufsize);
   assert(buffer != NULL);
   memset(buffer, 0, sizeof(struct NLRI_LIST) + prefix_bytes);
   list = (struct NLRI_LIST*) (buffer + prefix_bytes);
-  memcpy(list->prefixes, nlri, sizeof(struct NLRI) * numnlri);
+  memcpy(list->prefixes, nlri, sizeof(struct NLRI) * (size_t) numnlri);
   free(nlri);
   list->num_nlri = numnlri;
   list->faults = faults;
@@ -2349,7 +2358,7 @@ struct BGP4MP_MESSAGE *mrt_deserialize_bgp4mp_message(
   memset(m, 0, sizeof(*m));
 
   /* first make sure we have enough bytes to begin parsing a BGP4MP_MESSAGE */
-  message_length = record->aftermrt - record->mrt_message;
+  message_length = (uint32_t) (record->aftermrt - record->mrt_message);
   min_length = 16 + sizeof(struct BGP_UPDATE_MESSAGE) + 2;
   if (record->mrt->subtype == BGP4MP_MESSAGE_AS4) min_length += 4;
   if (message_length < min_length) {
@@ -2632,9 +2641,9 @@ struct MRT_RECORD *mrt_read_record(
     snprintf(error,99,"MRT header short read %lu of at least %lu bytes",
       r, sizeof(header));
     error[99]=0;
-    record->mrt = (struct MRT_COMMON_HEADER*) malloc(r);
+    record->mrt = (struct MRT_COMMON_HEADER*) malloc((size_t) r);
     assert(record->mrt!=NULL);
-    memcpy ((void*) record->mrt, &header, r);
+    memcpy ((void*) record->mrt, &header, (size_t) r);
     tr = newtraceback(record, error, mrt_overall_format);
     record->trace_read = tr;
     tr->firstbyte = (uint8_t*) tr->mrt;
@@ -2651,7 +2660,7 @@ struct MRT_RECORD *mrt_read_record(
    * we should. */
   len = ntohl(header.length);
   bytes = sizeof(header) + (sizeof(uint8_t) * len);
-  record->mrt = (struct MRT_COMMON_HEADER*) malloc (bytes);
+  record->mrt = (struct MRT_COMMON_HEADER*) malloc ((size_t) bytes);
   if (record->mrt==NULL) {
     /* malloc failure, maybe length is insane */
     char error[100];
@@ -2679,8 +2688,8 @@ struct MRT_RECORD *mrt_read_record(
   /* Successful malloc() for buffer to read the MRT record. Read the bytes. */
   memcpy (record->mrt, &header, sizeof(header));
   bytes = sizeof(uint8_t) * len;
-  r = mread(file, record->mrt->message, bytes);
-  if (r != (sizeof(uint8_t)*len)) {
+  r = mread(file, record->mrt->message, (size_t) bytes);
+  if (r != (ssize_t) (sizeof(uint8_t)*len)) {
     /* short read of MRT record */
     char error[100];
 

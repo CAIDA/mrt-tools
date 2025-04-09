@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall -g -O2
+CFLAGS := -Wall -Wextra -Wno-implicit-fallthrough -g -O2 
 LDFLAGS :=
 
 targets = bgp-explain msort-test
@@ -17,10 +17,7 @@ bgp-explain: explain.o mrt.o msort.o
 msort-test: msort.o msort-test.o
 	$(CC) -o $@ $(LDFLAGS) msort.o msort-test.o
 
-#compresspoc: mrt.o serialize.o compresspoc.o msort.o
-#	$(CC) -o $@ $(LDFLAGS) compresspoc.o mrt.o msort.o serialize.o
-
-compresspoc2: mrt.o serialize.o compresspoc.o msort.o dedupehash.o
+compresspoc: mrt.o serialize.o compresspoc.o msort.o dedupehash.o
 	$(CC) -o $@ $(LDFLAGS) compresspoc.o mrt.o msort.o serialize.o dedupehash.o
 
 clean:

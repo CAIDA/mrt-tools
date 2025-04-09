@@ -559,7 +559,7 @@ void print_bgp4mp (
 , uint64_t bytes_read
 , struct BGP4MP_MESSAGE *m
 , const struct OPTIONS *options
-, struct STATS *stats
+, struct STATS *stats __attribute__((unused))
 ) {
   struct BGP_ATTRIBUTE *a;
   int i;
@@ -953,9 +953,12 @@ void tryit (void) {
 }
 
 static error_t
-parse_opt (int key, char *arg, struct argp_state *state)
+parse_opt (
+  int key
+, char *arg __attribute__((unused))
+, struct argp_state *state
 /* callback from argp_parse which handles a single command line option */
-{
+) {
   /* Get the input argument from argp_parse, which we
      know is a pointer to our arguments structure. */
   struct OPTIONS *options = (struct OPTIONS*) state->input;
@@ -1013,24 +1016,25 @@ int main (int argc, char **argv) {
     {"explain",  'e', 0,      0,  
       "Trace decoded MRT record to the bytes in the file."
       " Include the expected byte format and a reference to the RFC or other"
-      " relevant documentation." },
+      " relevant documentation.", 0 },
     {"trace",    't', 0,      0,  
-      "Trace decoded MRT record to the bytes in the file." },
+      "Trace decoded MRT record to the bytes in the file.", 0 },
     {"quiet",    'q', 0,      0,  
-      "Trace but do not explain errors in MRT records." },
+      "Trace but do not explain errors in MRT records.", 0 },
     {"bad",      'b', 0,      0,  
-      "Only display MRT records containing errors." },
+      "Only display MRT records containing errors.", 0 },
     {"count",    'c', 0,      0,  
       "Suppress record output. Count the number of bad, correct and total "
       "MRT entries. Return non-zero if the file contains at least one bad "
-      "MRT entry." },
+      "MRT entry.", 0 },
     { 0 }
   };
   char args_doc[] = "";
   char argp_doc[] = 
     "read and explain the contents of a BGP MRT file received from stdin";
   struct argp argp_parser = 
-    { argp_options, parse_opt, args_doc, argp_doc };
+    { .options = argp_options, .parser = parse_opt, 
+      .args_doc = args_doc, .doc = argp_doc };
 
   argp_parse(&argp_parser, argc, argv, 0, 0, &options);
 
