@@ -1,0 +1,21 @@
+compressionpoc is test code used to evaluate whether MRT files containing
+BGP updates can be usefully compressed on disk by eliminating duplicate
+information. The components of the update record containing everything
+except the timestamp and routes (NLRIs) are stored in a hash file and a
+reference to that file is made in the saved entry. If that data is already
+there from a prior BGP update then the reference to the pre-existing record
+is kept. That data includes BGP attributes such as the AS path, neighbor AS
+and so on.
+
+In tests with one month of BGP data from routeviews, about a 40% reduction
+in disk storage was observed with more than 9 of 10 records duplicating
+data in a prior record.
+
+Further avenues for exploration:
+
+1) De-duplicate the routes (NRLIs) too.
+
+2) Evaluate compression techniques for MRT files containing BGP table dumps.
+In addition to the compression methods used for updates, table dumps should be
+able to be stored as occasional full dumps plus differentials against that
+last full dump.

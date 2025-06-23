@@ -1,6 +1,7 @@
 *.o
 src/bgp-explain
 src/msort-test
+src/compresspoc
 test/misalignment
 test/mrt-header
 test/shift
